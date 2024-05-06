@@ -1,0 +1,23 @@
+real eps = 0.1, x0 = -1, x1 = 1, y0 = -1, y1 = 1, r = 0.8;
+mesh Th1 = square(20, 20, [-1 + 2*x, -1 + 2*y]);
+// mesh Th0 = square(20, 20, [-1 + 2*x, -1 + 2*y]);
+fespace Vh1(Th1, P2);
+// fespace Vh0(Th0, P0);
+func f1 = tanh(-(x^2 + y^2 - r^2) / eps);
+// func f = sin(x)*cos(y);
+Vh1 fh1 = f1;
+// Vh0 fh0 = f;
+// plot(Th0, fh0);
+// plot(Th1, fh1);
+
+for (int i=0; i<10; i++){
+    plot(Th1, fh1, wait=1, fill=1);
+    Th1 = adaptmesh(Th1, fh1);
+    fh1 = f1;
+}
+
+// for (int i=0; i<50; i++){
+//     plot(Th0, fh0, wait=1);
+//     Th0 = adaptmesh(Th0, fh0);
+//     fh0 = f;
+// }

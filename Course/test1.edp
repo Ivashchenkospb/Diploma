@@ -1,0 +1,25 @@
+real a = 10;
+
+int NN = 100;
+
+int labelBottom = 1;
+int labelLeft = 2;
+int labelTop = 3;
+int labelRight = 4;
+int labelInner = 5;
+
+border GammaBottom(t = -a/2, a/2){x = t; y = -a/2; label = labelBottom;}
+border GammaLeft(t = -a/2, a/2){x = -a/2; y = -t; label = labelLeft;}
+border GammaTop(t = -a/2, a/2){x = -t; y = a/2; label = labelTop;}
+border GammaRight(t = 0, pi){x = a/2*sin(t) + a/2; y = -a/2*cos(t); label = labelRight;}
+border GammaInner(t = 0, 2*pi){x = a/6*cos(t); y = a/6*sin(t); label = labelInner;}
+
+plot(GammaBottom(NN)+GammaLeft(NN)+GammaTop(NN)+GammaRight(NN)+GammaInner(NN));
+
+mesh Th = buildmesh(
+    GammaBottom(NN)+GammaLeft(NN)+GammaTop(NN)+GammaRight(NN)+GammaInner(-NN)
+);
+plot(Th);
+
+fespace Vh(Th, P1);
+Vh u, v;

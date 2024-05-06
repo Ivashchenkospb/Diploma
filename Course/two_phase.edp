@@ -1,0 +1,159 @@
+real Lx = 1;
+real Ly = 0.1;
+
+int n = 50*2*2;
+int nx = n;
+int ny = 2;
+
+int labelB = 1;
+int labelR = 2;
+int labelT = 3;
+int labelL = 4;
+
+mesh Th = square(nx, ny, [Lx*x, Ly*y]);
+plot(Th);
+
+real pOut = 0; /* Pa */
+real qtIn = 3.85e-5; /* m^2/s Total rate per pay zone height*/
+
+/* Relative permeabilities */
+real eps = 1e-6;
+real Swc = 0.35;
+real Soc = 0.32;
+
+real kro0 = 0.86;
+real krw0 = 0.21;
+real no = 2;
+real nw = 2;
+
+real muW = 0.35e-3; /* Pa*s */
+real muO = 2.06e-3; /* Pa*s */
+
+real SwInlet = 1.0 - Soc - eps; /* Inlet BC */
+real phi0 = 0.2;
+real k = 1e-14; /* m^2, Absolute permeability*/
+
+real dt = 0.005*1e4 / 2 / 2; /* Timestep */
+
+func real krw(real SwIn){
+    real S = (SwIn - Swc)/(1-Swc-Soc);
+    S = min(1.0, S);
+    S = max(0.0, S);
+
+    return krw0*S^nw;
+}
+
+func real kro(real SwIn){
+    real S = (SwIn - Swc)/(1-Swc-Soc);
+    S = min(1.0, S);
+    S = max(0.0, S);
+
+    return kro0*(1-S)^no;
+}
+
+func real lambdaW(real SwIn){
+    return krw(SwIn) / muW;
+}
+
+func real lambdaO(real SwIn){
+    return kro(SwIn) / muO;
+}
+
+func real lambdaT(real SwIn){
+    return lambdaW(SwIn) + lambdaO(SwIn);
+}
+
+/* Buckley-Leverett */
+func real fW(real SwIn){
+    return lambdaW(SwIn) / lambdaT(SwIn);
+}
+
+/*Derivative of Buckley-Leverett (!!! only for nw=no=2)*/
+func real fWCoreyDerivative(real SwIn){
+
+    real S = (SwIn - Swc)/(1-Swc-Soc);
+    S = min(1.0, S);
+    S = max(0.0, S);
+
+    real denum = (krw0*S^2*muO + kro0*(1-S)^2*muW)^2;
+
+    real derS = 2*krw0*kro0*(1-S)*S*muW*muO / denum;
+
+    return derS / (1 - Swc - Soc);
+
+}
+
+// fespace definition
+fespace Vh(Th, P1);
+
+Vh Sw, SwOld, SwIter, psi; // SwOld с пред шага по времени, SwIter с предыдущей итерации
+
+SwOld = Swc;
+
+macro grad(p) [ dx(p), dy(p) ] // EOM
+
+load "MUMPS_seq"
+
+real epsilon = 1e-2 /2/2/4/5*1e-4; // искуственная вязкость
+
+//Все сжимаемости равны нулю (несжимаемый случай рассматриваем)
+//Параллельно реализовали метод Ньютона и разделили линейные и билинейные формы
+problem SaturationProblem( Sw, psi, solver=sparsesolver ) = 
+    int2d(Th)(
+        phi0*Sw*psi 
+        + dt*epsilon*grad(Sw)'*grad(psi)
+        - dt*qtIn*fWCoreyDerivative(SwIter)*Sw*dx(psi)
+    ) 
+    + int2d(Th)(
+        - dt*qtIn*fW(SwIter)*dx(psi)
+        + dt*qtIn*fWCoreyDerivative(SwIter)*SwIter*dx(psi)
+        - phi0*SwOld*psi
+    )
+    + int1d(Th, labelR)(
+        dt*qtIn*fW(SwIter)*psi*N.x
+        - dt*qtIn*fWCoreyDerivative(SwIter)*SwIter*psi*N.x
+    )
+    +int1d(Th, labelR)(
+        dt*qtIn*fWCoreyDerivative(SwIter)*Sw*psi*N.x
+    )
+    + on(labelL, Sw = SwInlet);
+
+real tMax = 10*1e4;
+real t=0;
+int it = 1;
+
+load "iovtk"
+int[int] order = [1];
+savevtk("./twophasesols/sol0.vtu", Th, SwOld, dataname="Sw", order = order);
+
+while ( t < tMax ){
+
+    SwIter = SwOld;
+    cout << "it = " << it << "\t;t = " << t << endl;
+
+    real relSwError = 1.0;
+
+    int kIter = 0;
+    while(relSwError > 1e-7){
+
+        SaturationProblem;
+
+        relSwError = 
+        int2d(Th)(abs(Sw - SwIter)) /
+        int2d(Th)(abs(Sw));
+
+        cout << "[" << kIter << "]: relSwError = " << relSwError << endl;
+
+        real omega = 0.75;
+
+        SwIter = Sw*omega + (1-omega)*SwIter;
+        kIter++;
+
+    }
+
+    savevtk("./twophasesols/sol" + it + ".vtu", Th, Sw, dataname="Sw", order = order);
+
+    SwOld = Sw;
+    t = t + dt;
+    it++;
+}

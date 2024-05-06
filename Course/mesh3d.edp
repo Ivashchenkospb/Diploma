@@ -1,0 +1,118 @@
+load "msh3" /*mesh3 generation*/
+load "iovtk"
+load "gmsh"
+load "tetgen"
+load "medit"
+
+/* Create cube */
+mesh3 ThCube = cube(3, 4, 5);
+// plot(ThCube);
+// medit("ThCube333", ThCube);
+savevtk("Cube.vtu", ThCube);
+
+/*Create cylinder*/
+real H = 2;
+real R = 1;
+
+int nPhi = 30;
+int nZ = 2;
+
+mesh ThCylParametrization = 
+    /*x=phi, y=z*/
+    square(nPhi, nZ, [2*pi*x, H*y]);
+
+/*Далее произведем отображение этой сетки в 3D*/
+
+meshS ThCylSideBorderSurf = 
+    movemesh23(ThCylParametrization, 
+    transfo=[R*cos(x), R*sin(x), y],
+    orientation=1);
+
+savevtk("ThCylSideBorderSurf.vtu", ThCylSideBorderSurf, bin=false);
+// plot(ThCylSideBorderSurf);
+
+/*Top and bottom of cylinder mesh*/
+
+int labelCircleBorder = 60;
+
+border GammaCircle(t=0.0,2*pi){
+    x=R*cos(t);
+    y=R*sin(t);
+    label = labelCircleBorder;
+}
+
+mesh ThCircle = buildmesh( GammaCircle(nPhi), fixedborder=true );
+/*количество точек на грани цилиндра и на краю крышки должны совпадать!!!*/
+
+int regionLabelCircle = 2;
+ThCircle = change(ThCircle, fregion=regionLabelCircle);
+// ThCircle = change(ThCircle, fregion=20*sin(x));
+
+int[int] regionTop = [regionLabelCircle, 11];
+int[int] labelLineBorderTop = [labelCircleBorder, 17];
+
+// plot(ThCircle);
+
+meshS ThTopCircleSurf = movemesh23(
+    ThCircle, 
+    transfo = [x, y, H], 
+    region = regionTop,
+    label = labelLineBorderTop,
+    orientation=1
+    );
+
+// plot(ThTopCircleSurf);
+savevtk( "ThTopCircleSurf.vtu", ThTopCircleSurf );
+
+meshS ThBottomCircleSurf = movemesh23(
+    ThCircle, 
+    transfo = [x, y, 0], 
+    orientation=-1 //т.к. иначе внешняя нормаль будет как у верхней крышки
+    );
+
+//Можем также задать среднюю границу
+meshS ThMiddleCircleSurf = movemesh23(
+    ThCircle, 
+    transfo = [x, y, H/2], 
+    orientation=1
+    );
+
+meshS ThCylinderSurf = 
+    ThCylSideBorderSurf + ThBottomCircleSurf + ThTopCircleSurf + ThMiddleCircleSurf;
+
+plot(ThCylinderSurf);
+
+//Точка ниже точно лежит внутри цилиндра
+real x1 = 0.0;
+real y1 = 0.0;
+real z1 = H/3;
+
+real edgelength = 0.1;
+real tetraVolumeMax = (edgelength)^3 / 3/ 2; //Условная оценка объема тетраэдра, по порядку величины скорее
+int regionLabel3d = 147;
+real[int] domain = [
+    x1, y1, z1, regionLabel3d, tetraVolumeMax,
+    x1, y1, 2*H/3, 52, 0.5*tetraVolumeMax
+];
+
+mesh3 ThCylinder3d = tetg(
+    ThCylinderSurf,
+    switch="paAA",
+    regionlist = domain
+);
+
+savevtk("ThCylinder3d.vtu", ThCylinder3d);
+
+//Сетку можем измельчить, но для этого нужно иметь базовую (бэкмэш)
+
+load "distance"
+
+real ind = 3.0;
+func tetraVolumeFunc = 
+    (0.1)^3 * (dist(x,y,z)/H)^ind
+    + (0.001)^3 * (1 - (dist(x,y,z)/H)^ind);
+
+mesh3 ThCyl3dRefined = tetgreconstruction(ThCylinder3d, switch="raAQ", sizeofvolume = tetraVolumeFunc);
+savevtk("ThCyl3dRefined.vtu", ThCyl3dRefined);
+
+savegmsh(ThCyl3dRefined, "ThCyl3dRefined");

@@ -1,0 +1,146 @@
+load "pipe"
+include "gnuplotInterface.edp"
+
+/* Domain geometry */
+
+real L = 80*2*2; /* [m], length of the domain */
+real H = 80*2*2; /* [m], height of the domain */
+real Lfrac = 20; /* [m], length of the fracture */
+
+
+/* Elasticity parameters (Lame coeffs) */
+
+real mu = 10e9; /* [Pa] Lame coeff */
+real lambda = 20e9; /* [Pa] Lame coeff */
+
+
+/* Stresses */
+
+real p = 1.5e6; /* [Pa] Fracture pressure */
+real sigmaInf = 1e6; /* [Pa] Stress at inf */
+
+
+int NN = 20; /* Mesh splitting */
+
+
+/* enumeration of coords */
+real[int] xP = [0, Lfrac, L, L, 0]; /* enumeration of xcoords */
+real[int] yP = [0, 0, 0, H, H]; /* enumeration of ycoords */
+
+/* meshing any parts of boundary */
+int[int] nGamma = [10*Lfrac/L, (L - Lfrac)/L, H/L, L/L, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+
+/* flags of boundaries */
+int labelF = 1; /* fracture */
+int labelC = 2; /* closed frac */
+int labelR = 3; /* Right hand side of domain */
+int labelT = 4; /* Top of domain */
+int labelL = 5; /* Left hand side of domain */
+
+int[int] labelGamma = [labelF, labelC, labelR, labelT, labelL];
+
+
+/*we should set the parametric expressions of all boundaries*/
+
+border GammaDomain(t = 0.0, 1.0; i)    /*i - number of boundary(label), t - parameter*/
+{
+    int iNext = (i+1) % nGamma.n;   /* .n - the length of the nGamma massive*/
+
+    x = xP[i]*(1-t) + xP[iNext]*t;
+    y = yP[i]*(1-t) + yP[iNext]*t;
+    label = labelGamma[i]; /* the flag of the boundary */
+
+}
+
+/* constructing and drawing the mesh */
+
+mesh Th = buildmesh(GammaDomain(nGamma));
+plot(Th, wait=1);
+
+/* Differential operators */
+
+macro div(u, v) (dx(u) + dy(v)) // EOM
+
+real sqrt2 = sqrt(2.0);
+
+macro epsilon(u, v) [dx(u), dy(v), (dy(u) + dx(v))/sqrt2 ] // EOM
+
+/* Finite element space definition */
+
+fespace Vh(Th, [P2, P2]);
+fespace Vh2(Th, P2);
+
+Vh [u, v];
+Vh [uu, vv]; /* test functions */
+
+solve LameFrac( [u, v], [uu, vv] ) = 
+    int2d(Th)(
+        lambda*div(u, v)*div(uu, vv) + 2*mu*epsilon(u, v)'*epsilon(uu, vv)
+    )
+    - int1d(Th, labelF)(
+        p*vv
+    )
+    + int1d(Th, labelT)(
+        sigmaInf*vv
+    )
+    + on(labelC, v = 0.0)
+    + on(labelL, u = 0.0);
+
+plot(Th, v, fill=1, nbiso=50, dim=2, value=1, wait=1);
+
+real zoom = 3000;
+
+int adaptLevels = 5;
+real error = 0.01;
+
+string sgnuplot = "gnuplot -persist";
+pstream pipeStream(sgnuplot, "w");
+
+real E = mu*(3*lambda + 2*mu) / (lambda + mu);
+real nu = lambda / 2 / (lambda + mu);
+real Eprime = E / (1 - nu^2);
+
+func real vExact(real x){
+    return
+        2*(p - sigmaInf) / Eprime * sqrt(Lfrac^2 - x^2);
+}
+
+for(int i = 0; i < adaptLevels; i++){
+    
+    Th = adaptmesh(
+        Th, [u, v],
+        err = error,
+        iso = 1
+    );
+
+    LameFrac;
+    mesh ThMoved = movemesh(Th, [x + zoom*u, y + zoom*v]);
+    error = error / 2;
+    plot(ThMoved, wait=1);
+
+    try{
+
+        int nPointsOut = 300;
+        real hx = Lfrac / (nPointsOut - 1);
+
+        real[int] xx(nPointsOut);
+        real[int] v1d(nPointsOut);
+        real[int] v1dExact(nPointsOut);
+
+        string[int] legend = ["vNum", "vExact"];
+
+        for( int i = 0; i < nPointsOut; i++ ){
+            xx[i] = 0.0 + hx*i;
+            v1d[i] = v(xx[i], 0.0);
+            v1dExact[i] = vExact(xx[i]);
+        }
+
+        drawTwoCurvesGnuplot(
+            pipeStream, xx, v1d, v1dExact, legend
+        );
+
+    }
+    catch(...){
+        cout << "catch error" << endl;
+    }
+}

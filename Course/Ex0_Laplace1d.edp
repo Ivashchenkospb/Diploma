@@ -1,0 +1,81 @@
+/*
+    Курс: Механика в разработке
+    Class: Mechanics in Field Development
+
+    Упражнение 0: Одномерное уравнение Пуассона -Laplace(p)=f
+
+    Exercise 1: 1D Poisson's equation -Laplace(p)=f
+
+    автор: Калинин С.А.
+    author: Kalinin S.A.
+
+
+*/
+
+load "msh3" 
+
+real mDtom2=9.869233E-16; // mD to m2 conversion coefficient
+real psitoPa=6893.76;// psi to Pa conversion coefficient
+real Daytos=86400;// day to sec conversion coefficient
+real T2KG=1000;//tonn to kg conversion coefficient
+
+real p1=50E5;
+real p2=250E5;
+
+real k=1*mDtom2; //rock permeability [m2]
+real mu=1E-3;//viscosity [Pa*sec]
+real h=20; //reservoir thickness
+
+real v=-200e5*k/mu/300;// [m/sec]
+
+
+cout<<"v = "<<v<<endl;
+
+real kDivMu=k/mu;
+
+int n=1000;
+meshL ThL=Sline(n,[300*x,0,0]);//3D-линия в виде прямой от 0 до 300 вдоль оси X (здесь параметр x меняется от 0 до 1)
+                                //3D-curve as line from 0 to 300 along X (0<x<1)
+
+
+
+fespace Vh(ThL,P1);
+
+Vh pCur, wp, f=5e-10;//
+
+problem Laplace1d(pCur,wp)  = int1d(ThL)(kDivMu*dx(wp)*dx(pCur)) - int1d(ThL)(f*wp)
+
+-int0d(ThL,1)(v*wp)
+//+ on(1,pCur=p1)
++ on(2,pCur=p2)
+;
+
+
+
+
+Laplace1d;
+
+plot(ThL,pCur, value = 1);
+
+string PATH2N="./"; //путь к файлам с численным решением path 2 files with numerical solution
+
+string fname=PATH2N+"1dsolution.dat";
+
+{
+    ofstream ff(fname);
+
+        for(int i=0; i<ThL.nv; i++)
+        {
+            
+                       
+            real xx=ThL(i).x ;
+            
+            ff<<ThL(i).x<<" "<<pCur(xx,0,0)<<endl;
+            
+            
+            
+        }
+				
+}	
+
+exec("gnuplot --persist -e \"plot \'"+fname+"\' w l\"");

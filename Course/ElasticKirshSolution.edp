@@ -1,0 +1,155 @@
+/* The exact solutions are given in
+    A. H.-D. Cheng Poroelasticity, 2016, Chapter 7.14, 7.15.4 */
+
+/* Tensor sigma for elastic Kirsh problem exact solution in (r, theta) coords */
+func real sigmarrExact(real r, real theta, real Pw){
+
+    real r2 = r^2;
+
+    return -Pw*Rw^2/r2 -(1-Rw^2 / r2)*PP0 + (1-4*Rw^2/ r2 + 3*Rw^4/ r2^2)*SS0*cos(2*theta); /* Eq. (7.604) + (7.723) */
+
+}
+
+func real sigmattExact(real r, real theta, real Pw ){
+    real r2 = r^2;
+
+    return Pw*Rw^2/r2 -(1+Rw^2 / r2)*PP0 - (1+ 3*Rw^4/ r2^2)*SS0*cos(2*theta); /* Eq. (7.605) + (7.724)  */
+
+}
+
+func real sigmartExact(real r, real theta){
+    real r2 = r^2;
+
+    return - (1+2*Rw^2/ r2 - 3*Rw^4/ r2^2)*SS0*sin(2*theta); /* Eq. (7.725)  */
+
+}
+
+/* Tensor sigma (total) for poroelastic Kirsh problem exact solution in (r, theta) coords
+for Late time (p = p0 everywhere) */
+func real sigmattLateTimeExact(real r, real theta, real Pw){
+    real r2 = r^2;
+
+    real sttPoro = -eta*(Pw-p0)*(1+Rw^2/r2); /* Eq. (7.615) */
+
+    return sttPoro + 
+        Pw*Rw^2/r2 -(1+Rw^2 / r2)*PP0 - (1+ 3*Rw^4/ r2^2)*SS0*cos(2*theta); /* Eq. (7.605) + (7.724)  */
+
+}
+
+func real sigmarrLateTimeExact(real r, real theta, real Pw){
+
+    real r2 = r^2;
+
+    real srrPoro = -eta*(Pw-p0)*(1-Rw^2/r2); /* Eq. (7.616) */
+
+    return srrPoro
+        -Pw*Rw^2/r2 -(1-Rw^2 / r2)*PP0 + (1-4*Rw^2/ r2 + 3*Rw^4/ r2^2)*SS0*cos(2*theta); /* Eq. (7.604) + (7.723) */
+
+}
+
+/* Tensor sigma for elastic Kirsh problem exact solution in (x, y) coords */
+/* T = (  cos(theta),  sin(theta)  )
+       (  -sin(theta), cos(theta)  ) - coord. transform matrix */
+
+/* Tensor transformation:
+    S{xy} = T^T * S{rtheta} * T 
+*/
+/* atan2(y,x) is theta \in [-pi, pi] */
+func real sigmaxxExact(real x, real y, real Pw){
+
+    real r = sqrt(x^2 + y^2);
+    real theta = atan2(y, x);
+
+    real Srr = sigmarrExact(r, theta, Pw);
+    real Srt = sigmartExact(r, theta);
+    real Stt = sigmattExact(r, theta, Pw);
+
+    real ct = cos(theta);
+    real st = sin(theta);
+    real c2t = cos(2*theta);
+    real s2t = sin(2*theta);
+
+    real Sxx = Srr*ct^2 - Srt*s2t + Stt*st^2;
+
+    return Sxx;
+}
+
+func real sigmaxyExact(real x, real y, real Pw){
+
+    real r = sqrt(x^2 + y^2);
+    real theta = atan2(y, x);
+
+    real Srr = sigmarrExact(r, theta, Pw);
+    real Srt = sigmartExact(r, theta);
+    real Stt = sigmattExact(r, theta, Pw);
+
+    real ct = cos(theta);
+    real st = sin(theta);
+    real c2t = cos(2*theta);
+    real s2t = sin(2*theta);
+
+    real Sxy = (Srr-Stt)*s2t/2 + Srt*c2t;
+
+    return Sxy;
+}
+
+func real sigmayyExact(real x, real y, real Pw){
+
+    real r = sqrt(x^2 + y^2);
+    real theta = atan2(y, x);
+
+    real Srr = sigmarrExact(r, theta, Pw);
+    real Srt = sigmartExact(r, theta);
+    real Stt = sigmattExact(r, theta, Pw);
+
+    real ct = cos(theta);
+    real st = sin(theta);
+    real c2t = cos(2*theta);
+    real s2t = sin(2*theta);
+
+    real Syy = Srr*st^2 + Srt*s2t + Stt*ct^2;
+
+    return Syy;
+}
+
+/* Tensor sigma (total) for poroelastic Kirsh problem exact solution in (x, y) coords
+for Late time (p = p0 everywhere) */
+func real sigmaxxLateTimeExact(real x, real y, real Pw){
+
+    real r = sqrt(x^2 + y^2);
+    real theta = atan2(y, x);
+
+    real Srr = sigmarrLateTimeExact(r, theta, Pw);
+    real Srt = sigmartExact(r, theta);
+    real Stt = sigmattLateTimeExact(r, theta, Pw);
+
+    real ct = cos(theta);
+    real st = sin(theta);
+    real c2t = cos(2*theta);
+    real s2t = sin(2*theta);
+
+    real Sxx = Srr*ct^2 - Srt*s2t + Stt*st^2;
+
+    return Sxx;
+}
+
+func real sigmayyLateTimeExact(real x, real y, real Pw){
+
+    real r = sqrt(x^2 + y^2);
+    real theta = atan2(y, x);
+
+    real Srr = sigmarrLateTimeExact(r, theta, Pw);
+    real Srt = sigmartExact(r, theta);
+    real Stt = sigmattLateTimeExact(r, theta, Pw);
+
+    real ct = cos(theta);
+    real st = sin(theta);
+    real c2t = cos(2*theta);
+    real s2t = sin(2*theta);
+
+    real Syy = Srr*st^2 + Srt*s2t + Stt*ct^2;
+
+    return Syy;
+}
+
+/* sigmaxyLateTimeExact = sigmaxy, no need for calc */

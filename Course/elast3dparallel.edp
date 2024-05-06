@@ -1,0 +1,98 @@
+load "PETSc"
+load "iovtk"
+
+
+/*==== HPDDM Prerequisites ====*/
+// по сути размерность задачи. Присваиваем dimension значение 3
+macro dimension()3 // EOM
+
+include "macro_ddm.idp"
+// по сути определение нашего вектора неизвестных [u, uB, uC]
+macro def(i)[i, i#B, i#C] // EOM
+// специальная штука, нужна для корректной работы
+macro init(i)[i, i, i] // EOM
+//с помощью func можно также задавать составной тип КЭМ пространств
+func Pk = [P1, P1, P1];
+
+/*==== End of prerequisites ====*/
+
+real Lx = 10.0;
+real mu = 10e9;
+real lambda = 20e9;
+real forceAlongZ = -9000;
+
+/* Mesh definition */
+int[int] Label = [2, 3, 2, 1, 2, 2];
+int NN = 5;
+int nx = 10*NN;
+int ny = NN;
+int nz = NN;
+
+// meshN определен в файле macro_ddm.idp
+meshN Th = 
+    cube(
+        nx, ny, nz,
+        [Lx*x, y, z],
+        label = Label
+    );
+
+int labelFixDispl = 1;
+
+/* Create distributed mesh */
+buildmesh(Th);
+
+/* Create fespaces */
+fespace Wh(tH, Pk);
+
+plot(Th);
+
+real sqrt2 = sqrt(2.0);
+// Знак # это конкатенация
+macro epsilon(u) [ dx(u), dy(u#B), dz(u#C),
+    (dz(u#B) + dy(u#C))/sqrt2, 
+    (dz(u) + dx(u#C))/sqrt2, 
+    (dy(u) + dx(u#B))/sqrt2 ] // EOM
+
+macro div(u) [dx(u) + dy(u#B) + dz(u#C)] // EOM
+
+/* Forms definition */
+//intN также определен в том файле
+varf LameMatrix( def(u), def(v) ) = 
+    intN(Th)(
+        lambda*div(u)*div(v)
+        + 2*mu*(epsilon(u)'*epsilon(v))
+    )
+    + on(labelFixDispl, u=0, uB=0, uC=0);
+
+varf LameRHS( def(u), def(v) ) = 
+    + intN(Th)( forceAlongZ*vC ) // Vc так как компонента силы только вдоль vC. Если бы была еще одна компонента было бы слагаемое с vB
+    + on(labelFixDispl, u=0, uB=0, uC=0);
+
+matrix AForm = LameMatrix(Wh, Wh);
+real[int] rhs = LameRHS(0, Wh);
+
+/* Create partition of unity */
+real[int] D;
+createPartition(Th, D, Pk);
+
+/*Create distributed matrix*/
+Mat A;
+CreateMat(Th, A, Pk);
+string PetscParams = "-ksp_view -ksp_type bcgs " +
+	" -ksp_rtol 1e-7 -ksp_max_it 10000 -ksp_atol 1e-100" +
+	" -ksp_initial_guess_nonzero -ksp_final_residual" + 
+	" -ksp_converged_reason";
+set(A, sparams = PetscParams);
+A = AForm;
+
+Wh def(u);
+u[] = A^-1 * rhs;
+// только х компонента
+macro def1(u) u // EOM
+
+plotMPI(Th, u, P1, def1, real, cmm = "udsds");
+
+/* Export to VTK */
+string filename = "sol.vtu";
+int[int] fforder = [1,1,1];
+savevtk(filename, Th, def(u), dataname="u", order= fforder);

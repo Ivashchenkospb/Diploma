@@ -1,0 +1,158 @@
+load "pipe"
+include "gnuplotInterface.edp"
+
+real L = 1500.0; /* [m] */
+real H = 1000.0; /* [m] */
+real Lfrac = 200.0; /* [m] */
+
+real k = 1.0*1e-14; /* [m^2], Permeability */
+real mu = 5.0*1e-3; /* [Pa*s], Viscosity */
+real phi = 0.2; /* [], Porosity */
+
+real E = 24.0*1e9; /* [Pa] */
+real nu = 0.21; /* [], Poisson coef */
+
+real Kf = 2.0*1e9; /* [Pa] */
+real Ks = E / 3 / (1-2*nu); /* [Pa] */
+
+real M = 1 / (phi / Kf + (1 - phi) / Ks);
+
+real pw = 35.0*1e6; /* [Pa], on frac pressure */
+real p0 = 26.4*1e6; /* [Pa], outer pressure */
+
+real alpha = 0.7;
+real lambda=E*nu/(1.0+nu)/(1.0-nu);
+real G=E/2.0/(1.0+nu);
+real PP=lambda+2.0*G;
+real wMax = 0.0;
+
+bool plotResults = 0;
+
+int NN = 50;
+
+int labelF = 1; /* fracture */
+int labelB = 2; /* Bottom */
+int labelR = 3; /* Right hand side of domain */
+int labelT = 4; /* Top of domain */
+int labelL = 5; /* Left hand side of domain */
+
+real[int] xP = [0.0, Lfrac, L, L, 0.0]; /* enumeration of xcoords */
+real[int] yP = [0.0, 0.0, 0.0, H, H]; /* enumeration of ycoords */
+
+int[int] nGamma = [10*Lfrac/L, 5*(L - Lfrac)/L, H/L, L/L, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+int[int] labelGamma = [labelF, labelB, labelR, labelT, labelL];
+
+border GammaDomain(t = 0.0, 1.0; i)    /*i - number of boundary(label), t - parameter*/
+{
+    int iNext = (i+1) % nGamma.n;   /* .n - the length of the nGamma massive*/
+
+    x = xP[i]*(1-t) + xP[iNext]*t;
+    y = yP[i]*(1-t) + yP[iNext]*t;
+    label = labelGamma[i]; /* the flag of the boundary */
+}
+
+/* constructing and drawing the mesh */
+mesh Th = buildmesh(GammaDomain(nGamma));
+if(plotResults){
+    plot(Th, wait=1, cmm="Mesh");
+}
+
+/* Finite element space definition */
+fespace Vh(Th, P2);
+fespace Vh1(Th, P1);
+Vh p, fi;
+Vh pOld;
+Vh psi, khi;
+// Vh w = pi/ 4.0 *wMax*sqrt(1 - (x^2)/Lfrac^2);
+Vh w = pi/4.0 * wMax;
+Vh RHS = alpha*(p-p0)/PP;
+Vh psix, psiy, psixx, psiyy, psixy, psiyx;
+Vh Sx, SxTot, Sy, SyTot, Sxy;
+
+pOld = p0;
+
+real dt = 3600; /* [s], Timestep */
+real tMax = 86400*30*6; /* [s], Maximal time */
+
+macro grad(p)[dx(p), dy(p)] // EOM
+
+varf FiltrationBilinearForm(p, fi) = 
+    int2d(Th)(p*fi + dt*k*M/mu*grad(p)'*grad(fi))
+    + on(labelF, p = pw)
+    + on(labelR, p = p0)
+    + on(labelT, p = p0);
+
+varf FiltrationLinearForm(p, fi) = 
+    int2d(Th)(pOld*fi)
+    + on(labelF, p = pw)
+    + on(labelR, p = p0)
+    + on(labelT, p = p0);
+
+varf BackstressBilinearForm(psi, khi) = 
+    int2d(Th)(grad(psi)'*grad(khi))
+    + on(labelR, psi=0)
+    + on(labelT, psi=0);
+
+varf BackstressLinearForm(psi, khi)=
+    - int1d(Th, labelF)(w*khi)
+    - int2d(Th)(RHS*khi)
+    + on(labelR, psi=0)
+    + on(labelT, psi=0);
+
+matrix A = FiltrationBilinearForm(Vh, Vh);
+matrix BB = BackstressBilinearForm(Vh, Vh);
+set(A, solver = sparsesolver);
+
+load "iovtk"
+int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+
+int i = 0;
+real t = 0;
+int nPoints = int(tMax / dt);
+real[int] tt(nPoints);
+real[int] bs(nPoints);
+
+while(t < tMax ){
+    real[int] b = FiltrationLinearForm(0, Vh);
+    p[] = A^-1*b;
+    pOld = p;
+    
+    RHS = alpha*(p-p0)/PP;
+    real[int] bB = BackstressLinearForm(0, Vh);
+    psi[] = BB^-1*bB;
+
+    psix = dx(psi);
+    psiy = dy(psi);
+    psixx = dx(psix);
+    psiyy = dy(psiy);
+    // psixy = dy(psix);
+    // psiyx = dx(psiy);
+
+    // Sx = lambda*(psixx+psiyy)+2*G*psixx;
+    // SxTot = Sx-alpha*(p-p0);
+    Sy = lambda*(psixx+psiyy)+2*G*psiyy;
+    SyTot = Sy-alpha*(p-p0);
+    // Sxy = G*(psixy+psiyx);
+
+    real bsAverage = -int1d(Th, labelF)(SyTot)/Lfrac;
+    // cout << bsAverage << endl;
+
+    tt[i] = t;
+    bs[i] = bsAverage;
+
+    // savevtk("./Filtration/sol" + i + ".vtu", Th, p, dataname = "p", order=order);
+    // if(plotResults){plot(Th, p, fill=1, wait=0, value=1, nbiso=100, cmm = "Time = " + t + " s"); }
+
+    cout << "Time = " << t << " s" << endl;
+    t = t + dt;
+    i = i + 1;
+}
+
+// savevtk("./Filtration/backstress.vtu", Th, p, psi, psix, psiy, psixx,
+//         psiyy, psixy, psiyx, psixx+psiyy, RHS, Sx, SxTot, Sy, SyTot,
+//         dataname = "p psi u v psixx psiyy psixy psiyx laplacePsi RHS Sx SxTot Sy SyTot", order=order);
+
+string[int] legend = ["Backstress", ""];
+string sgnuplot = "gnuplot -persist";
+pstream pipeStream(sgnuplot, "w");
+drawTwoCurvesGnuplot(pipeStream, tt, bs, bs, legend);

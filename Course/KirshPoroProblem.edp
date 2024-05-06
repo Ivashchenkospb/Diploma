@@ -1,0 +1,157 @@
+/* Domain Geometry */
+
+real L = 5*2*2*2*4*2; /*m*/
+real H = 5*2*2*2*4*2; /*m*/
+real Rw = 0.5; /*Wellbore radius, [m]*/
+
+/* Phys params */
+/* Lame coeffs*/
+real lambda = 20e9; /*[Pa]*/ 
+real G = 10e9; /*[Pa]*/
+real alpha = 0.8; /*Biot coef, []*/
+real k = 1e-15; /*permeability, [m^2]*/
+real mu = 1e-3; /*viscosity, [Pa*s]*/
+real Seps = 1e-10; /*Storativity (Упругоемкость), [1/Pa]*/
+real E = G*(3*lambda + 2*G) / (lambda + G);
+real nu = lambda / 2 / (lambda + G);
+real eta = alpha*(1-2*nu)/(2-2*nu); /*[], Poroelastic coef.*/
+
+/*Boundary cond*/
+real sigmaXInf = 32e6; /*Stress on far along X*/
+real sigmaYInf = 30e6; /*Stress on far along Y*/
+
+real p0 = 20e6; /*Init pore pressure, [Pa]*/
+real pw = 40e6; /*pressure on wellbore for t>0, [Pa]*/
+
+real PP0 = (sigmaYInf + sigmaXInf) / 2.0;
+real SS0 = (sigmaYInf - sigmaXInf) / 2.0;
+
+include "ElasticKirshSolution.edp"
+
+/*Mesh definition*/
+int n = 3*2*2;
+
+real[int] xP = [-L, L, L, -L];
+real[int] yP = [-H, -H, H, H];
+
+int[int] nGamma = [
+    L/L, H/L, L/L, H/L
+]*n;
+
+int nWell = 4*4*n;
+
+int labelB = 1;
+int labelR = 2;
+int labelT = 3;
+int labelL = 4;
+int labelW = 5;
+
+int[int] labelGamma = [
+    labelB, labelR, labelT, labelL
+];
+
+border GammaDomain(t = 0, 1; i){
+    int iNext = (i+1)%nGamma.n;
+    x = xP[i] * (1 - t) + xP[iNext] * t;
+    y = yP[i] * (1 - t) + yP[iNext] * t;
+    label = labelGamma[i];
+}
+
+border GammaWell(t = 0, 2*pi){
+    x = Rw*cos(t);
+    y = Rw*sin(t);
+    label = labelW;
+}
+
+mesh Th = buildmesh(GammaDomain(nGamma) + GammaWell(-nWell));
+plot(Th);
+
+/*Diff operators*/
+real sqrt2 = sqrt(2.0);
+macro epsilon(u, v) [dx(u), dy(v), (dy(u)+dx(v))/sqrt2] // EOM
+macro div(u, v) (dx(u) + dy(v)) // EOM
+macro grad(p) [dx(p), dy(p)] // EOM
+
+/*fespace definition*/
+fespace Vh(Th, [P2, P2, P1]);
+fespace Vh1(Th, P1);
+fespace Vh2(Th, P2);
+
+Vh [u, v, p];
+Vh [uu, vv, pp];
+
+/*From previous timestep*/
+Vh2 uOld, vOld;
+Vh1 pOld;
+
+load "iovtk"
+
+/*init solution generation*/
+
+solve KirshInitProblem([u, v, p], [uu, vv, pp]) = 
+    int2d(Th)(
+        lambda*div(u, v)*div(uu, vv) 
+        + 2*G*epsilon(u, v)' * epsilon(uu, vv) 
+        - alpha*p*div(uu, vv)
+        + k/mu*grad(p)'*grad(pp)
+        )
+    + int1d(Th, labelT)(sigmaYInf*vv)
+    - int1d(Th, labelB)(sigmaYInf*vv)
+    + int1d(Th, labelR)(sigmaXInf*uu)
+    - int1d(Th, labelL)(sigmaXInf*uu)
+    + int1d(Th, labelW)(p0*[N.x, N.y]'*[uu, vv])
+    + on(labelB, labelT, labelL, labelR, labelW, p = p0)
+;
+
+/* Calculate total stresses */
+
+Vh1 sigmayy = lambda*div(u, v) + 2*G*dy(v) - alpha*p;
+
+/* Calculate exact total stresses */
+
+Vh1 sigmayyExactH = sigmayyExact(x, y, p0);
+Vh1 sigmayyLateTimeExactH = sigmayyLateTimeExact(x, y, p0);
+
+int[int] order = [1, 1, 1, 1];
+
+savevtk("sol0.vtu", Th, sigmayy, sigmayyExactH, sigmayyLateTimeExactH, p, dataname = "syy syyEx, syyLtEx, p", order=order);
+
+/* Time-dependent poroelastic problem*/ 
+
+uOld = u;
+vOld = v;
+pOld = p;
+real dt = 3600*12; /* [s] */
+
+problem KirshTimeProblem([u, v, p], [uu, vv, pp]) = 
+    int2d(Th)(
+        lambda*div(u, v)*div(uu, vv) 
+        + 2*G*epsilon(u, v)' * epsilon(uu, vv) 
+        - alpha*p*div(uu, vv)
+        + Seps*p*pp
+        + alpha*div(u, v)*pp
+        + dt*k/mu*grad(p)'*grad(pp)
+        )
+    - int2d(Th)(Seps*pOld*pp + alpha*div(uOld, vOld)*pp)
+    + int1d(Th, labelT)(sigmaYInf*vv)
+    - int1d(Th, labelB)(sigmaYInf*vv)
+    + int1d(Th, labelR)(sigmaXInf*uu)
+    - int1d(Th, labelL)(sigmaXInf*uu)
+    + int1d(Th, labelW)(pw*[N.x, N.y]'*[uu, vv])
+    + on(labelW, p = pw)
+    + on(labelB, labelT, labelL, labelR, p = p0)
+;
+
+sigmayyExactH = sigmayyExact(x, y, pw);
+sigmayyLateTimeExactH = sigmayyLateTimeExact(x, y, pw);
+
+for( int it = 1; it < 1000; it++ ){
+
+    KirshTimeProblem;
+    sigmayy = lambda*div(u, v) + 2*G*dy(v) - alpha*p;
+    savevtk("sol" + it + ".vtu", Th, sigmayy, sigmayyExactH, sigmayyLateTimeExactH, p, dataname = "syy syyEx, syyLtEx, p", order=order);
+    uOld = u;
+    vOld = v;
+    pOld = p;
+
+}

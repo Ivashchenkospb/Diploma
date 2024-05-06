@@ -1,0 +1,208 @@
+/* Domain Geometry */
+real a = 1;
+
+
+/*Exact solution*/
+
+    func uu = 1/(1 + x^2) + 1/(1 + y^2);
+
+/*Fist Order Derivative for Neumann BC*/
+
+    func duux = ( -(2*x)/(x^2 + 1)^2);
+
+    func duuy = (-(2*y)/(y^2 + 1)^2);
+
+/*Right Hand Side*/
+    func RHS = -( (8*x^2)/(x^2 + 1)^3 - 2/(x^2 + 1)^2 - 2/(y^2 + 1)^2 + (8*y^2)/(y^2 + 1)^3);
+
+
+/* Mesh definition */
+
+int NN=10;
+
+
+int labelBottom = 1;
+int labelRight = 2;
+int labelTop = 3;
+int labelLeft = 4;
+int labelCircleInner = 5;
+
+
+border GammaBottom(t = 0, 1){
+    x = 7*a*t;
+    y = 0;
+    label = labelBottom;
+}
+
+border GammaRight(t = -0.5*pi, 0.5*pi){
+    x = 7*a + 2*a*cos(t);
+    y = 2*a + 2*a*sin(t);
+    label = labelRight;
+}
+
+border GammaTop(t = 1, 0){
+    x = 7*a*t;
+    y = 4*a;
+    label = labelTop;
+}
+
+border GammaLeft(t = 0.5*pi, -0.5*pi){
+    x = 2*a*cos(t);
+    y = 2*a + 2*a*sin(t);
+    label = labelLeft;
+}
+
+border GammaCircleInner(t = 0, 2*pi){
+    x = 7*a + 0.5*cos(t);
+    y = 2*a + 0.5*sin(t);
+    label = labelCircleInner;
+}
+
+/* Max element and log of uErrAbsL2Norm */
+
+int numOfMeshes=5;
+
+real[int] loghmax(numOfMeshes);
+
+real[int] logErr(numOfMeshes);
+
+real uErrAbsL2NormOld; /*uErrAbsL2Norm at previous iteration*/
+
+real uErrAbsL2NormRatio; /*eq.22 in Theory*/
+
+for (int i=0; i<numOfMeshes; i++){
+
+        
+        /*Define mesh*/
+            plot(GammaBottom(NN), GammaRight(NN),
+            GammaTop(NN), GammaLeft(NN), GammaCircleInner(NN), dim=2, wait=1);
+
+            mesh Th = buildmesh(GammaBottom(NN) + GammaRight(NN) + 
+            GammaTop(NN) + GammaLeft(NN) + GammaCircleInner(-NN));
+
+        
+
+        /*Define fespace*/
+
+            fespace Vh(Th, P1);
+
+            Vh uExact = uu;
+            Vh u;
+            
+
+            plot(uExact, wait=1, fill=1,value=1, nbiso=50, cmm="Exact solution");
+
+
+        /* Bilinear form definition */
+            varf LaplaceBilinearForm(u, v) = 
+                int2d(Th)(
+                    dx(u)*dx(v) + dy(u)*dy(v)
+                )
+            +on(labelBottom, labelTop, labelCircleInner, u = uExact);
+
+        /* Linear form definition */
+            varf LaplaceLinearForm(u, v) = 
+                int2d(Th)(
+                    RHS*v
+                )
+                + int1d(Th, labelRight, labelLeft)(
+                    (duux*N.x*v+duuy*N.y*v)
+                            )
+                
+                + on(labelBottom, labelTop, labelCircleInner,  u = uExact);
+
+        /*Matrix solution*/
+            matrix A = LaplaceBilinearForm(Vh, Vh); 
+            real[int] b = LaplaceLinearForm(0, Vh);
+
+            set(A, solver=sparsesolver);
+
+
+            u[] = A^-1*b;
+
+        /*Display solution*/
+                
+            plot(Th, u, fill=1, dim=2, value=true,
+                nbiso=50, cmm="Poisson Solution with " + Th.nt + " elements",
+                wait=1
+                );
+        /*Error Estimate*/
+            Vh uErrorAbs=abs(u-uExact);
+
+            real uErrorAbsL2Norm=
+
+                    sqrt (
+                        int2d(Th)(
+                            uErrorAbs^2
+                        )
+
+                    );
+
+            real uL2Norm=
+
+                    sqrt (
+                        int2d(Th)(
+                            uExact^2
+                        )
+
+                    );
+            
+            real uErrorRelL2Norm =
+                    uErrorAbsL2Norm/uL2Norm;
+
+            cout << "uErrorAbsL2Norm = "<< uErrorAbsL2Norm << endl;
+
+            cout << "uL2Norm = "<< uL2Norm << endl;
+
+            cout << "uErrorRelL2Norm = "<< uErrorRelL2Norm << endl;
+
+            real loguErrAbsL2Norm=log(uErrorAbsL2Norm);
+
+            cout << "log (uErrAbsL2Norm) = "<<loguErrAbsL2Norm<<endl;
+
+            logErr[i]=loguErrAbsL2Norm;
+
+        /*Define the size h of maximal element in the mesh to estimate an order of convergence*/
+
+            fespace Ph(Th,P0);
+            Ph h=hTriangle;
+
+            cout << "h = "<<h[].max<<endl;
+
+            loghmax[i]=log(h[].max);
+
+            /*Print results of order of convergence to file*/
+
+            if (i==0){
+
+                    uErrAbsL2NormOld=uErrorAbsL2Norm; /*Abs L2Norm Error at previous iteration*/
+                    
+
+                    ofstream f("./Order.txt");
+                    {
+                        f<<h[].max<<"\t"<<uErrorAbsL2Norm<<"\t"<<uL2Norm<<"\t"
+                         <<uErrorRelL2Norm<<"\t"<<loghmax[i]<<"\t"<<logErr[i]<<"\t"
+                         <<uErrAbsL2NormOld/uErrAbsL2NormOld<<"\n";
+                    }
+            }
+            else {  
+                    uErrAbsL2NormRatio=uErrAbsL2NormOld/uErrorAbsL2Norm;
+
+                    ofstream f("./Order.txt",append);
+                    {
+                        f<<h[].max<<"\t"<<uErrorAbsL2Norm<<"\t"<<uL2Norm<<"\t"
+                         <<uErrorRelL2Norm<<"\t"<<loghmax[i]<<"\t"<<logErr[i]<<"\t"
+                         <<uErrAbsL2NormRatio<<"\n";
+                    }
+
+                    uErrAbsL2NormOld=uErrorAbsL2Norm;
+
+            }
+
+
+    NN=2*NN;
+}
+
+
+
+
