@@ -72,7 +72,7 @@ Vh Sx, SxTot, Sy, SyTot, Sxy;
 pOld = p0;
 
 real dt = 3600; /* [s], Timestep */
-real tMax = 86400*30*6; /* [s], Maximal time */
+real tMax = 86400*30; /* [s], Maximal time */
 
 macro grad(p)[dx(p), dy(p)] // EOM
 
@@ -125,14 +125,14 @@ while(t < tMax ){
     psiy = dy(psi);
     psixx = dx(psix);
     psiyy = dy(psiy);
-    // psixy = dy(psix);
-    // psiyx = dx(psiy);
+    psixy = dy(psix);
+    psiyx = dx(psiy);
 
-    // Sx = lambda*(psixx+psiyy)+2*G*psixx;
-    // SxTot = Sx-alpha*(p-p0);
+    Sx = lambda*(psixx+psiyy)+2*G*psixx;
+    SxTot = Sx-alpha*(p-p0);
     Sy = lambda*(psixx+psiyy)+2*G*psiyy;
     SyTot = Sy-alpha*(p-p0);
-    // Sxy = G*(psixy+psiyx);
+    Sxy = G*(psixy+psiyx);
 
     real bsAverage = -int1d(Th, labelF)(SyTot)/Lfrac;
     // cout << bsAverage << endl;
@@ -148,9 +148,9 @@ while(t < tMax ){
     i = i + 1;
 }
 
-// savevtk("./Filtration/backstress.vtu", Th, p, psi, psix, psiy, psixx,
-//         psiyy, psixy, psiyx, psixx+psiyy, RHS, Sx, SxTot, Sy, SyTot,
-//         dataname = "p psi u v psixx psiyy psixy psiyx laplacePsi RHS Sx SxTot Sy SyTot", order=order);
+savevtk("./Filtration/backstress.vtu", Th, p, psi, psix, psiy, psixx,
+        psiyy, psixy, psiyx, psixx+psiyy, RHS, Sx, SxTot, Sy, SyTot,
+        dataname = "p psi u v psixx psiyy psixy psiyx laplacePsi RHS Sx SxTot Sy SyTot", order=order);
 
 string[int] legend = ["Backstress", ""];
 string sgnuplot = "gnuplot -persist";
