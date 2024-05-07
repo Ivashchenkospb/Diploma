@@ -17,7 +17,7 @@ real Ks = E / 3 / (1-2*nu); /* [Pa] */
 
 real M = 1 / (phi / Kf + (1 - phi) / Ks);
 
-real pw = 35.0*1e6; /* [Pa], on frac pressure */
+real pw = 30.0*1e6; /* [Pa], on frac pressure */
 real p0 = 26.4*1e6; /* [Pa], outer pressure */
 
 real alpha = 0.7;
@@ -72,7 +72,7 @@ Vh Sx, SxTot, Sy, SyTot, Sxy;
 pOld = p0;
 
 real dt = 3600; /* [s], Timestep */
-real tMax = 86400*30; /* [s], Maximal time */
+real tMax = 86400*10; /* [s], Maximal time */
 
 macro grad(p)[dx(p), dy(p)] // EOM
 
@@ -140,8 +140,8 @@ while(t < tMax ){
     tt[i] = t;
     bs[i] = bsAverage;
 
-    // savevtk("./Filtration/sol" + i + ".vtu", Th, p, dataname = "p", order=order);
-    // if(plotResults){plot(Th, p, fill=1, wait=0, value=1, nbiso=100, cmm = "Time = " + t + " s"); }
+    savevtk("./Filtration/sol" + i + ".vtu", Th, p, dataname = "p", order=order);
+    if(plotResults){plot(Th, p, fill=1, wait=0, value=1, nbiso=100, cmm = "Time = " + t + " s"); }
 
     cout << "Time = " << t << " s" << endl;
     t = t + dt;
