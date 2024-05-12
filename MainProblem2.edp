@@ -322,12 +322,20 @@ while(t < tMax){
     real bsAverage = -int1d(Th, labelF)(sBfull)/Lfrac;
     sB[3] = bsAverage;
     pf = int1d(Th, labelF)(p)/Lfrac;
+    real pAverage = int2d(Th)(p) / Th.measure;
+    pr[3] = pAverage;
 
     cout << endl;
     cout << "Time = " << t << " s" << endl;
     cout << "Backstress = " << bsAverage << endl;
     cout << "On frac pressure = " << pf << endl;
+    cout << "Average pressure = " << pAverage << endl;
+    cout << "Delta = " << pAverage - 26.4*1e6 << endl;
     cout << endl;
+
+    Xh PrFunc = pr[0] * (x <= layerBorder[1]) + pr[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
+         + pr[2] * (x > layerBorder[2] && x <= layerBorder[3])+ pr[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
+         + pr[4] * (x > layerBorder[4]);
 
     Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
             + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
@@ -368,7 +376,8 @@ while(t < tMax){
     Sxx = lambdaFunc*div(u, v) + 2.0*muFunc*dx(u) - alpha*PrFunc;
     Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v) - alpha*PrFunc;
 
-    savevtk("./Results/ElasticityResultsWithPressure" + i + ".vtu", Thw, u, v, Syy, sigmaMin, dataname = "u v Syy Smin", order=order);
+    savevtk("./Results/ElasticityResultsWithChangingPressure" + i + ".vtu", Thw, u, v, Syy, sigmaMin,
+            PrFunc, dataname = "u v Syy Smin Pr", order=order);
     savevtk("./Results/solQ" + i + ".vtu", Th, p, sBfull, psi, psix, psiy, deltaSx, deltaSxTot, deltaSy, deltaSyTot,
             dataname = "p Backstress psi u v Sx SxTot Sy SyTot", order=order);
 

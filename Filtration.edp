@@ -66,7 +66,7 @@ Vh sBfull = 0.0;
 real[int] xdelta = [0.0];//  coord x of point source
 real[int] ydelta = [0.0];//  coord y of point source
 real[int] cdelta=[dt*Q];//  value of point source
-matrix D = interpolate(Vh,xdelta,ydelta); // the interpolation matrix
+matrix D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
 RHSQ[] = D*cdelta;
 // plot(Th, RHSQ);
 
@@ -108,7 +108,7 @@ real[int] bs(nPoints);
 
 int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 
-while(t < tMax ){
+while(t < tMax){
     real[int] b = FiltrationLinearForm(0, Vh);
     p[] = A^-1*b;
 
