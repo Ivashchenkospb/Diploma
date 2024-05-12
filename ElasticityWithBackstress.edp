@@ -1,7 +1,7 @@
 real alpha = 0.7;
 real rho0 = 2300.0;  
 real g = 9.80665;
-real pf = 30.0*1e6; /* Pa, Fracture pressure */
+real pf = 17.0*1e6; /* Pa, Fracture pressure */
 
 
 real[int] layerBorder = [   /* [m], Layer borders depth            */
@@ -14,30 +14,6 @@ real[int] layerBorder = [   /* [m], Layer borders depth            */
 ];
 
 int nLayer = layerBorder.n - 1; /* Number of layers */
-
-// int[int] prodLayerNum = [   /* [], Numbers of production layers    */
-//     1
-// ];
-
-// int[int] activeLayer = [   /* [], States of production layers    */
-//     0, 
-//     1,
-//     0
-// ];
-
-// real [int] fiPorosity = [
-//         0.2,
-//         0.2,
-//         0.2
-//     ];
-
-// real[int] Perm=[    /* [mD] permeability in layers*/
-//     0.001,
-//     1.0,
-//     0.001
-// ];
-
-// real Kf = 2e9; /* [Pa] */
 
 real[int] E = 1.0e9*[       /* [Pa], Young's modulus               */
     24.00,
@@ -80,9 +56,9 @@ real[int] rho = [
 ];
 
 real penalty = 1.0e5*E[0];
-int maxIter = 40;                   /* Maximum number of nonlinear iterations */
+int maxIter = 10;                   /* Maximum number of nonlinear iterations */
 real tol = 1.0e-6;                  /* Tolerance for iteration stop criterion */
-verbosity = 1;
+verbosity = 0;
 
 /* Domain definition and mesh generation */
 real frcS = 20.0;
@@ -130,7 +106,7 @@ Vh [uIter, vIter];
 Vh [phi, psi];
 Xh Sxx, Syy, Txy;
 
-Xh Prr = pr[0] * (x <= layerBorder[1]) + pr[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
+Xh PrFunc = pr[0] * (x <= layerBorder[1]) + pr[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
          + pr[2] * (x > layerBorder[2] && x <= layerBorder[3])+ pr[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
          + pr[4] * (x > layerBorder[4]);
 Xh EFunc = E[0] * (x <= layerBorder[1]) + E[1] * (x > layerBorder[1] && x <= layerBorder[2])
@@ -145,11 +121,10 @@ Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= 
 Xh lambdaFunc = nuFunc*EFunc / ((1 + nuFunc) * (1 - 2*nuFunc));
 Xh muFunc = EFunc / (2 + 2*nuFunc);
 Xh sigmaV = rho0*g*x;
-Xh sigmaMin = (nuFunc / (1 - nuFunc)) * (sigmaV - alpha*Prr) + alpha*Prr;
+Xh sigmaMin = (nuFunc / (1 - nuFunc)) * (sigmaV - alpha*PrFunc) + alpha*PrFunc;
 
 /* Macros for differential operators, strain and stress tensors */
 real sqrt2 = sqrt(2.0);
-/* macro grad(p) [dx(p), dy(p)] // EOM */
 macro div(u, v) (dx(u) + dy(v)) // EOM
 macro epsilon(u, v) [dx(u), dy(v), (dy(u) + dx(v))/sqrt2] // EOM
 
@@ -158,14 +133,16 @@ varf ElasticityBilinearForm([u, v], [phi, psi]) =
         lambdaFunc*div(u,v)*div(phi, psi) + 2.0*muFunc*epsilon(u, v)'*epsilon(phi, psi)
     )
     + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0);
+    + on(labelRight, u = 0.0)
+    + on(labelTop, v = 0.0);
 
 varf PenaltyBilinearForm([u, v], [phi, psi]) =
     int1d(Th, labelFrac)(
         penalty*v*(vIter < 0.0)*psi
     )
     + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0);
+    + on(labelRight, u = 0.0)
+    + on(labelTop, v = 0.0);
 
 varf RhsLinearForm([u, v], [phi, psi]) = 
     int2d(Th)(
@@ -177,11 +154,9 @@ varf RhsLinearForm([u, v], [phi, psi]) =
     + int1d(Th, labelLeft)(
         sigmaV*phi
     )
-    - int1d(Th, labelTop)(
-        sigmaMin*psi
-    )
     + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0);
+    + on(labelRight, u = 0.0)
+    + on(labelTop, v = 0.0);
 
 load "MUMPS_seq"
 matrix Ae = ElasticityBilinearForm(Vh, Vh);
@@ -223,9 +198,9 @@ while (relErrorL2 > tol && count < maxIter) {
 
 // plot(Th, u, dim=2, value=1, nbiso=30, fill=1, wait=1, cmm="u");
 // plot(Th, v, dim=2, value=1, nbiso=30, fill=1, wait=1, cmm="v");
-real coef = 200.0;
-mesh Th2 = movemesh(Th, [x + coef*u, y + coef*v]);
-plot(Th2, wait=1);
+// real coef = 200.0;
+// mesh Th2 = movemesh(Th, [x + coef*u, y + coef*v]);
+// plot(Th2, wait=1);
 // Vh [u2, v2] = [0, v];
 // plot(Th2, [u, v], dim=2, value=1, nbiso=30, fill=1, wait=1, cmm="Displacement vector");
 // plot(Th, [u2, v2], dim=2, value=1, wait=1);
@@ -238,7 +213,7 @@ Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
 
 load "iovtk"
 int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-savevtk("./elasticityBackstress/ElasticityResults.vtu", Th, 
+savevtk("./ElasticityResults.vtu", Th, 
         u, v, Sxx, Syy, sigmaMin, sigmaV, lambdaFunc, muFunc, EFunc, nuFunc,
         dataname = "u v Sxx Syy Smin Sv lambda mu E nu", order=order);
 

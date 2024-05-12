@@ -6,7 +6,7 @@ real H = 1000.0; /* [m] */
 real Lfrac = 200.0; /* [m] */
 
 real k = 1.0*1e-14; /* [m^2], Permeability */
-real mu = 5.0*1e-3; /* [Pa*s], Viscosity */
+real mu = 1.0*1e-3; /* [Pa*s], Viscosity */
 real phi = 0.2; /* [], Porosity */
 
 real E = 24.0*1e9; /* [Pa] */
@@ -24,8 +24,10 @@ real alpha = 0.7;
 real lambda=E*nu/(1.0+nu)/(1.0-nu);
 real G=E/2.0/(1.0+nu);
 real PP=lambda+2.0*G;
-real wMax = 0.0;
 
+real Seps = ((alpha-phi)*(1-alpha))/(lambda+2*G/3);
+
+// real M = 1/Seps;
 bool plotResults = 0;
 
 int NN = 50;
@@ -59,20 +61,17 @@ if(plotResults){
 
 /* Finite element space definition */
 fespace Vh(Th, P2);
-fespace Vh1(Th, P1);
 Vh p, fi;
 Vh pOld;
 Vh psi, khi;
-// Vh w = pi/ 4.0 *wMax*sqrt(1 - (x^2)/Lfrac^2);
-Vh w = pi/4.0 * wMax;
 Vh RHS = alpha*(p-p0)/PP;
 Vh psix, psiy, psixx, psiyy, psixy, psiyx;
 Vh Sx, SxTot, Sy, SyTot, Sxy;
 
 pOld = p0;
 
-real dt = 3600; /* [s], Timestep */
-real tMax = 86400*10; /* [s], Maximal time */
+real dt = 3600.0; /* [s], Timestep */
+real tMax = 86400.0*10; /* [s], Maximal time */
 
 macro grad(p)[dx(p), dy(p)] // EOM
 
@@ -94,7 +93,6 @@ varf BackstressBilinearForm(psi, khi) =
     + on(labelT, psi=0);
 
 varf BackstressLinearForm(psi, khi)=
-    - int1d(Th, labelF)(w*khi)
     - int2d(Th)(RHS*khi)
     + on(labelR, psi=0)
     + on(labelT, psi=0);

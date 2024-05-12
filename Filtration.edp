@@ -1,0 +1,154 @@
+load "iovtk"
+load "pipe"
+include "gnuplotInterface.edp"
+
+real L = 1500.0; /* [m] */
+real H = 1000.0; /* [m] */
+real Lfrac = 200.0; /* [m] */
+real kr = 1.0*1e-14; /* [m^2], Reservoir permeability */
+real mu = 1.0*1e-3; /* [Pa*s], Viscosity (Reservoir fluid visc == Fracture fluid visc) */
+real fiPorosity = 0.2; /* [], Porosity */
+real E = 24.0*1e9; /* [Pa] */
+real nu = 0.21; /* [], Poisson coef */
+real alpha = 0.7; /* [], Biot coef */
+real lambda=E*nu/(1.0+nu)/(1.0-nu); /* [Pa], Lame coef */
+real G=E/2.0/(1.0+nu); /* [Pa], Lame coef */
+real PP=lambda+2.0*G;
+real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
+real kf = kr*1e5;
+// cout << kf << endl;
+// exit(0);
+real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
+real p0 = 26.4*1e6; /* [Pa], outer pressure */
+real dt = 864.0; /* [s], Timestep */
+real tMax = 86400.0; /* [s], Maximal time */
+
+/* Mesh definition */
+int NN = 50;
+
+int labelF = 1; /* fracture */
+int labelB = 2; /* Bottom */
+int labelR = 3; /* Right hand side of domain */
+int labelT = 4; /* Top of domain */
+int labelL = 5; /* Left hand side of domain */
+
+real[int] xP = [0.0, Lfrac, L, L, 0.0]; /* enumeration of xcoords */
+real[int] yP = [0.0, 0.0, 0.0, H, H]; /* enumeration of ycoords */
+
+int[int] nGamma = [10*Lfrac/L, 5*(L - Lfrac)/L, H/L, L/L, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+int[int] labelGamma = [labelF, labelB, labelR, labelT, labelL];
+
+border GammaDomain(t = 0.0, 1.0; i)    /*i - number of boundary(label), t - parameter*/
+{
+    int iNext = (i+1) % nGamma.n;   /* .n - the length of the nGamma massive*/
+
+    x = xP[i]*(1-t) + xP[iNext]*t;
+    y = yP[i]*(1-t) + yP[iNext]*t;
+    label = labelGamma[i]; /* the flag of the boundary */
+}
+
+/* constructing and drawing the mesh */
+mesh Th = buildmesh(GammaDomain(nGamma));
+
+/* Finite element space definition */
+fespace Vh(Th, P2);
+Vh p, phi;
+Vh pOld;
+Vh RHSQ;
+pOld = p0;
+
+Vh psi, khi;
+Vh RHS = alpha*(p-p0)/PP;
+Vh psix, psiy, psixx, psiyy, psixy, psiyx;
+Vh deltaSx, deltaSxTot, deltaSy, deltaSyTot, deltaSxy;
+Vh sBfull = 0.0;
+
+real[int] xdelta = [0.0];//  coord x of point source
+real[int] ydelta = [0.0];//  coord y of point source
+real[int] cdelta=[dt*Q];//  value of point source
+matrix D = interpolate(Vh,xdelta,ydelta); // the interpolation matrix
+RHSQ[] = D*cdelta;
+// plot(Th, RHSQ);
+
+/* Weak problem formulation */
+macro grad(p)[dx(p), dy(p)] // EOM
+
+varf FiltrationBilinearForm(p, phi) = 
+    int2d(Th)(Seps*p*phi) 
+    + int2d(Th)((dt*kr/mu)*grad(p)'*grad(phi)) 
+    + int1d(Th, labelF)((dt*kf/mu)*dx(p)*dx(phi))
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
+
+varf FiltrationLinearForm(p, phi) = 
+    int2d(Th)(Seps*pOld*phi)
+    + RHSQ[]
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
+
+varf BackstressBilinearForm(psi, khi) = 
+    int2d(Th)(grad(psi)'*grad(khi))
+    + on(labelR, psi=0)
+    + on(labelT, psi=0);
+
+varf BackstressLinearForm(psi, khi)=
+    - int2d(Th)(RHS*khi)
+    + on(labelR, psi=0)
+    + on(labelT, psi=0);
+
+matrix A = FiltrationBilinearForm(Vh, Vh);
+matrix BB = BackstressBilinearForm(Vh, Vh);
+set(A, solver = sparsesolver);
+
+int i = 0;
+real t = 0;
+int nPoints = int(tMax / dt);
+real[int] tt(nPoints);
+real[int] bs(nPoints);
+
+int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+
+while(t < tMax ){
+    real[int] b = FiltrationLinearForm(0, Vh);
+    p[] = A^-1*b;
+
+    RHS = alpha*(p-pOld)/PP;
+    real[int] bB = BackstressLinearForm(0, Vh);
+    psi[] = BB^-1*bB;
+
+    psix = dx(psi);
+    psiy = dy(psi);
+    psixx = dx(psix);
+    psiyy = dy(psiy);
+    // psixy = dy(psix);
+    // psiyx = dx(psiy);
+
+    deltaSx = lambda*(psixx+psiyy)+2*G*psixx;
+    deltaSxTot = deltaSx-alpha*(p-pOld);
+    deltaSy = lambda*(psixx+psiyy)+2*G*psiyy;
+    deltaSyTot = deltaSy-alpha*(p-pOld);
+    // deltaSxy = G*(psixy+psiyx);
+
+    sBfull = sBfull + deltaSyTot;
+    real bsAverage = -int1d(Th, labelF)(sBfull)/Lfrac;
+    tt[i] = t;
+    bs[i] = bsAverage;
+
+    cout << "Time = " << t << " s" << endl;
+    // savevtk("./Filtration/solQ" + i + ".vtu", Th, p, psi, psix, psiy, psixx,
+    //     psiyy, psixy, psiyx, psixx+psiyy, RHS, Sx, SxTot, Sy, SyTot,
+    //     dataname = "p psi u v psixx psiyy psixy psiyx laplacePsi RHS Sx SxTot Sy SyTot", order=order);
+    savevtk("./Filtration/solQ" + i + ".vtu", Th, p, psi, psix, psiy, psixx,
+        psiyy, psixx+psiyy, RHS, deltaSx, deltaSxTot, deltaSy, deltaSyTot,
+        dataname = "p psi u v psixx psiyy laplacePsi RHS Sx SxTot Sy SyTot", order=order);
+
+    pOld = p;
+    t = t + dt;
+    i = i + 1;
+    }
+
+savevtk("./Filtration/parameters.vtu", Th, p, sBfull, RHSQ, dataname = "p Backstress deltafuncQ", order=order);
+string[int] legend = ["Backstress", ""];
+string sgnuplot = "gnuplot -persist";
+pstream pipeStream(sgnuplot, "w");
+drawTwoCurvesGnuplot(pipeStream, tt, bs, bs, legend);
