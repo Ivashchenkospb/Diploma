@@ -1,0 +1,16 @@
+/*------------------------------------------------------------------------------------------*/
+
+/*  Fespace definition for   *\
+\* filtration and backstress */
+
+fespace Vh(Th, P2);
+Vh p, phi;
+Vh pOld;
+Vh RHSQ;
+pOld = p0;
+
+Vh psi, khi;
+Vh RHS = alpha*(p-p0)/PP;
+Vh psix, psiy, psixx, psiyy, psixy, psiyx;
+Vh deltaSx, deltaSxTot, deltaSy, deltaSyTot, deltaSxy;
+Vh sBfull = 0.0;

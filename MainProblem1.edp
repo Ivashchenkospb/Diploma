@@ -3,336 +3,60 @@ load "pipe"
 load "MUMPS_seq"
 include "gnuplotInterface.edp"
 
-/*------------------------------------------------------------------------------------------*/
+include "Parameters.edp"
 
-/* Domain geometry and parameters *\
-|   for filtration and backstress  |
-\*          definition            */
+include "ElasticityMeshGen.edp" 
 
-real L = 1500.0; /* [m] */
-real H = 1000.0; /* [m] */
-real Lfrac = 200.0; /* [m] */
-real kr = 1.0*1e-14; /* [m^2], Reservoir permeability */
-real kf = kr*1e5; /* [m^2], Fracture permeability */
-real mu = 1.0*1e-3; /* [Pa*s], Reservoir and fracture fluid viscosity */
-real fiPorosity = 0.2; /* [], Porosity */
-real E = 24.0*1e9; /* [Pa], Young modulus */
-real nu = 0.21; /* [], Poisson coef */
-real alpha = 0.7; /* [], Biot coef */
-real lambda=E*nu/(1.0+nu)/(1.0-nu); /* [Pa], Lame coef */
-real G=E/2.0/(1.0+nu); /* [Pa], Lame coef */
-real PP=lambda+2.0*G;
-real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
-real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
-real p0 = 26.4*1e6; /* [Pa], Outer pressure */
-real dt = 100.0; /* [s], Timestep */
-real tMax = 10000.0; /* [s], Maximal time */
-real kIc = 1.73*1e6; /* [Pa*m^0.5] Fracture toughness */
-
-/*------------------------------------------------------------------------------------------*/
-
-/* Domain geometry and parameters *\
-\* for fracture width definition  */
-
-real rho0 = 2300.0;  
-real g = 9.80665;
-real pf = 17.0*1e6; /* Pa, Fracture pressure */
-
-real[int] layerBorder = [ /* [m], Layer borders depth */
-    1500.0,
-    2650.0,
-    2690.0,
-    2700.0,
-    2750.0,
-    4000.0
-];
-
-int nLayer = layerBorder.n - 1; /* Number of layers */
-
-real[int] Ew = 1.0e9*[ /* [Pa], Young's modulus */
-    24.00,
-    24.00,
-    24.00,
-    24.00,
-    24.00
-];
-
-real[int] nuw = [ /* [], Poisson's ratio */
-    0.31,
-    0.21,
-    0.31,
-    0.21,
-    0.31
-];
-
-real[int] pr = 1.0e6 * [ /* [Pa], Reservoir pressure */
-    26.4,
-    26.4,
-    26.4,
-    26.4,
-    26.4
-];
-
-real[int] sB = 1.0e6*[ /* [Pa], Backstress in each layer */
-    0.0,
-    0.0,
-    0.0,
-    0.0,
-    0.0
-];
-
-real penalty = 1.0e5*Ew[0];
-int maxIter = 40;                   /* Maximum number of nonlinear iterations */
-real tol = 1.0e-6;                  /* Tolerance for iteration stop criterion */
-
-/*------------------------------------------------------------------------------------------*/
-
-/*   Domain definition and mesh generation  *\
-\* for filtration and backstress definition */
-
-int NN = 50;
-
-int labelF = 1; /* fracture */
-int labelB = 2; /* Bottom */
-int labelR = 3; /* Right hand side of domain */
-int labelT = 4; /* Top of domain */
-int labelL = 5; /* Left hand side of domain */
-
-real[int] xP = [0.0, Lfrac, L, L, 0.0]; /* enumeration of xcoords */
-real[int] yP = [0.0, 0.0, 0.0, H, H]; /* enumeration of ycoords */
-
-int[int] nGamma = [10*Lfrac/L, 5*(L - Lfrac)/L, H/L, L/L, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
-int[int] labelGamma = [labelF, labelB, labelR, labelT, labelL];
-
-border GammaDomain(t = 0.0, 1.0; i)    /*i - number of boundary(label), t - parameter*/
-{
-    int iNext = (i+1) % nGamma.n;   /* .n - the length of the nGamma massive*/
-
-    x = xP[i]*(1-t) + xP[iNext]*t;
-    y = yP[i]*(1-t) + yP[iNext]*t;
-    label = labelGamma[i]; /* the flag of the boundary */
-}
-
-/* constructing and drawing the mesh */
-mesh Th = buildmesh(GammaDomain(nGamma));
-
-/*------------------------------------------------------------------------------------------*/
-
-/*   Domain definition and mesh generation  *\
-\*      for fracture width definition       */
-
-real frcS = 20.0;
-int NNN = 100;
-
-real xMin = layerBorder[0];
-real xFracL = layerBorder[1] - frcS;
-real xFracR = layerBorder[4] + frcS;
-real xMax = layerBorder[5];
-real yMax = (xMin + xMax) / 2.0 / 2.0;
-real Hsize = xMax - xMin;
-
-real[int] xPw = [xMin, xFracL, xFracR, xMax, xMax, xMin];
-real[int] yPw = [0, 0, 0, 0, yMax, yMax];
-
-int[int] nGammaW = [(xFracL - xMin)/Hsize, 
-                   20*(xFracR - xFracL)/Hsize,
-                   (xMax - xFracR)/(xMax - xMin), yMax/Hsize, 1, yMax/Hsize] * NNN;
-
-int labelBottom = 1;
-int labelFrac = 2;
-int labelRight = 3;
-int labelTop = 4;
-int labelLeft = 5;
-int[int] labelGammaW = [labelBottom, labelFrac, labelBottom,
-                       labelRight, labelTop, labelLeft];
-
-border GammaDomainW( t = 0.0, 1.0; i ) {
-    int iNext = (i + 1)%nGammaW.n;
-    x = xPw[i]*(1.0 - t) + xPw[iNext]*t;
-    y = yPw[i]*(1.0 - t) + yPw[iNext]*t;
-    label = labelGammaW[i];
-}
-
-mesh Thw = buildmesh(GammaDomainW(nGammaW));
-
-/*------------------------------------------------------------------------------------------*/
-
-/*  Fespace definition for   *\
-\* filtration and backstress */
-
-fespace Vh(Th, P2);
-Vh p, phi;
-Vh pOld;
-Vh RHSQ;
-pOld = p0;
-
-Vh psi, khi;
-Vh RHS = alpha*(p-p0)/PP;
-Vh psix, psiy, psixx, psiyy, psixy, psiyx;
-Vh deltaSx, deltaSxTot, deltaSy, deltaSyTot, deltaSxy;
-Vh sBfull = 0.0;
-
-/*------------------------------------------------------------------------------------------*/
-
-/*  Fespace definition for   *\
-\* filtration and backstress */
-
-fespace Wh(Thw, [P2, P2]);
-fespace Xh(Thw, P1);
-
-Wh [u, v];
-Wh [uIter, vIter];
-Wh [phiw, psiw];
-Xh Sxx, Syy, Txy;
-
-Xh PrFunc = pr[0] * (x <= layerBorder[1]) + pr[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
-         + pr[2] * (x > layerBorder[2] && x <= layerBorder[3])+ pr[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
-         + pr[4] * (x > layerBorder[4]);
-Xh EFunc = Ew[0] * (x <= layerBorder[1]) + Ew[1] * (x > layerBorder[1] && x <= layerBorder[2])
-           + Ew[2] * (x > layerBorder[2] && x <= layerBorder[3]) + Ew[3] * (x > layerBorder[3] && x <= layerBorder[4])
-           + Ew[4] * (x > layerBorder[4]);
-Xh nuFunc = nuw[0] * (x <= layerBorder[1]) + nuw[1] * (x > layerBorder[1] && x <= layerBorder[2])
-            + nuw[2] * (x > layerBorder[2] && x <= layerBorder[3]) + nuw[3] * (x > layerBorder[3] && x <= layerBorder[4])
-            + nuw[4] * (x > layerBorder[4]);
-Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
-            + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
-            + sB[4] * (x > layerBorder[4]);
-Xh lambdaFunc = nuFunc*EFunc / ((1 + nuFunc) * (1 - 2*nuFunc));
-Xh muFunc = EFunc / (2 + 2*nuFunc);
-Xh sigmaV = rho0*g*x;
-Xh sigmaMin = -((nuFunc / (1 - nuFunc)) * (sigmaV - alpha*PrFunc) + alpha*PrFunc);
-
-/*------------------------------------------------------------------------------------------*/
-
-/*  Weak problem formulation for   *\
-\*    filtration and backstress    */
-
-real[int] xdelta = [0.0]; // coord x of point source
-real[int] ydelta = [0.0]; // coord y of point source
-real[int] cdelta=[dt*Q];  // value of point source
-matrix D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
-RHSQ[] = D*cdelta;
+include "ElasticityFespaceDef.edp"
 
 macro grad(p)[dx(p), dy(p)] // EOM
 
-varf FiltrationBilinearForm(p, phi) = 
-    int2d(Th)(Seps*p*phi) 
-    + int2d(Th)((dt*kr/mu)*grad(p)'*grad(phi)) 
-    + int1d(Th, labelF)((dt*kf/mu)*dx(p)*dx(phi))
-    + on(labelT, p = p0)
-    + on(labelR, p = p0);
+include "ElasticityWeakProblem.edp"
 
-varf FiltrationLinearForm(p, phi) = 
-    int2d(Th)(Seps*pOld*phi)
-    + RHSQ[]
-    + on(labelT, p = p0)
-    + on(labelR, p = p0);
 
-varf BackstressBilinearForm(psi, khi) = 
-    int2d(Th)(grad(psi)'*grad(khi))
-    + on(labelR, psi=0)
-    + on(labelT, psi=0);
+/*---------------------------------- MAIN CYCLE ----------------------------------*/
 
-varf BackstressLinearForm(psi, khi)=
-    - int2d(Th)(RHS*khi)
-    + on(labelR, psi=0)
-    + on(labelT, psi=0);
-
-/*------------------------------------------------------------------------------------------*/
-
-/*  Weak problem formulation for   *\
-\*    fracture width definition    */
-
-real sqrt2 = sqrt(2.0);
-macro div(u, v) (dx(u) + dy(v)) // EOM
-macro epsilon(u, v) [dx(u), dy(v), (dy(u) + dx(v))/sqrt2] // EOM
-
-varf ElasticityBilinearForm([u, v], [phiw, psiw]) = 
-    int2d(Thw)(
-        lambdaFunc*div(u,v)*div(phiw, psiw) + 2.0*muFunc*epsilon(u, v)'*epsilon(phiw, psiw)
-    )
-    + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0)
-    + on(labelTop, v = 0.0);
-
-varf PenaltyBilinearForm([u, v], [phiw, psiw]) =
-    int1d(Thw, labelFrac)(
-        penalty*v*(vIter < 0.0)*psiw
-    )
-    + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0)
-    + on(labelTop, v = 0.0);
-
-varf RhsLinearForm([u, v], [phiw, psiw]) = 
-    int2d(Thw)(
-        alpha*PrFunc*div(phiw, psiw)
-    )
-    + int2d(Thw)(
-        rho0*g*phiw
-    )
-    + int1d(Thw, labelFrac)(
-        (pf - sBFunc)*psiw
-    )
-    + int1d(Thw, labelLeft)(
-        sigmaV*phiw
-    )
-    + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0)
-    + on(labelTop, v = 0.0);
-
-/*------------------------------------------------------------------------------------------*/
-
-/*                   *\
-|      MAIN CYCLE     |
-\*                   */
-
-matrix A = FiltrationBilinearForm(Vh, Vh);
-matrix BB = BackstressBilinearForm(Vh, Vh);
 matrix Ae = ElasticityBilinearForm(Wh, Wh);
-set(A, solver = sparsesolver);
 
 real[int] omega = [1.0, 0.75, 0.5, 0.3];
 int nOmega = omega.n;
+int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 
 int i = 0;
 real t = 0;
-
-[uIter, vIter] = [0.0, 0.0];
-
-int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-
 while(t < tMax){
+
+    include "FiltrationMeshGen.edp" 
+    include "FiltrationFespaceDef.edp"
+    include "FiltrationWeakProblem.edp"
+
+    matrix A = FiltrationBilinearForm(Vh, Vh);
+    matrix BB = BackstressBilinearForm(Vh, Vh);
+    set(A, solver = sparsesolver);
     real[int] b = FiltrationLinearForm(0, Vh);
     p[] = A^-1*b;
 
     RHS = alpha*(p-pOld)/PP;
     real[int] bB = BackstressLinearForm(0, Vh);
     psi[] = BB^-1*bB;
-
     psix = dx(psi);
     psiy = dy(psi);
     psixx = dx(psix);
     psiyy = dy(psiy);
-
     deltaSx = lambda*(psixx+psiyy)+2*G*psixx;
     deltaSxTot = deltaSx-alpha*(p-pOld);
     deltaSy = lambda*(psixx+psiyy)+2*G*psiyy;
     deltaSyTot = deltaSy-alpha*(p-pOld);
-
     sBfull = sBfull + deltaSyTot;
     real bsAverage = -int1d(Th, labelF)(sBfull)/Lfrac;
     sB[3] = bsAverage;
+
     pf = int1d(Th, labelF)(p)/Lfrac;
-
-    cout << endl;
-    cout << "Time = " << t << " s" << endl;
-    cout << "Backstress = " << bsAverage << endl;
-    cout << "On frac pressure = " << pf << endl;
-    cout << endl;
-
-    Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
-            + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
-            + sB[4] * (x > layerBorder[4]);
+    sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
+              + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
+              + sB[4] * (x > layerBorder[4]);
+    pEff = pf - alpha*PrFunc - sBFunc;
+    pNet = pf - sigmaMin - sBFunc;
 
     real[int] bw = RhsLinearForm(0, Wh);
 
@@ -341,6 +65,10 @@ while(t < tMax){
     real relErrorL2 = 1.0;
     int count = 0;
     int iOmega = 0;
+    [uIter, vIter] = [0.0, 0.0];
+
+    cout << endl;
+    cout << "Time = " << t << " s" << endl;
 
     while (relErrorL2 > tol && count < maxIter) {
         matrix Ap = PenaltyBilinearForm(Wh, Wh);
@@ -360,24 +88,15 @@ while(t < tMax){
             iOmega += 1;  
         }
 
-        cout << endl;
         cout << "    relaxation parameter = " << omega[iOmega] << " (" << iOmega + 1 << " / " << nOmega << ")" << endl;
         cout << "    iteration = " << count << " (" << maxIter << ")" << endl;
         cout << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
     }
 
-    Sxx = lambdaFunc*div(u, v) + 2.0*muFunc*dx(u) - alpha*PrFunc;
-    Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v) - alpha*PrFunc;
+    Sxx = lambdaFunc*div(u, v) + 2.0*muFunc*dx(u);
+    Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
 
-    real ShAverage = -int1d(Thw, labelFrac)(Syy) / (xFracR - xFracL);
-
-    cout << endl;
-    cout << "  ShAverage = " << ShAverage << endl;
-    cout << "  pNet = " << pf - bsAverage - ShAverage << endl;
-    cout << 2*kIc/sqrt(pi*(layerBorder[4] - layerBorder[3])) << endl;
-    cout << endl;
-
-    savevtk("./Results/ElasticityResultsWithPressure" + i + ".vtu", Thw, u, v, Syy, sigmaMin, dataname = "u v Syy Smin", order=order);
+    savevtk("./Results/ElasticityResults" + i + ".vtu", Thw, u, v, Syy, sigmaMin, pNet, dataname = "u v Syy Smin pNet", order=order);
     // savevtk("./Results/solQ" + i + ".vtu", Th, p, sBfull, psi, psix, psiy, deltaSx, deltaSxTot, deltaSy, deltaSyTot,
     //         dataname = "p Backstress psi u v Sx SxTot Sy SyTot", order=order);
 
@@ -385,5 +104,3 @@ while(t < tMax){
     t = t + dt;
     i = i + 1;
 }
-
-

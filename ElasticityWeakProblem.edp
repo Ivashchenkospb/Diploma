@@ -1,0 +1,36 @@
+/*  Weak problem formulation for   *\
+\*    fracture width definition    */
+
+real sqrt2 = sqrt(2.0);
+macro div(u, v) (dx(u) + dy(v)) // EOM
+macro epsilon(u, v) [dx(u), dy(v), (dy(u) + dx(v))/sqrt2] // EOM
+
+varf ElasticityBilinearForm([u, v], [phiw, psiw]) = 
+    int2d(Thw)(
+        lambdaFunc*div(u,v)*div(phiw, psiw) + 2.0*muFunc*epsilon(u, v)'*epsilon(phiw, psiw)
+    )
+    + on(labelBottom, v = 0.0)
+    + on(labelRight, u = 0.0)
+    + on(labelTop, v = 0.0);
+
+varf PenaltyBilinearForm([u, v], [phiw, psiw]) =
+    int1d(Thw, labelFrac)(
+        penalty*v*(vIter < 0.0)*psiw
+    )
+    + on(labelBottom, v = 0.0)
+    + on(labelRight, u = 0.0)
+    + on(labelTop, v = 0.0);
+
+varf RhsLinearForm([u, v], [phiw, psiw]) = 
+    int2d(Thw)(
+        rho0*g*phiw
+    )
+    + int1d(Thw, labelFrac)(
+        pEff*psiw
+    )
+    + int1d(Thw, labelLeft)(
+        sigmaVeff*phiw
+    )
+    + on(labelBottom, v = 0.0)
+    + on(labelRight, u = 0.0)
+    + on(labelTop, v = 0.0);

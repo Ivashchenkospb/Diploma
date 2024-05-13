@@ -1,0 +1,31 @@
+/*  Weak problem formulation for   *\
+\*    filtration and backstress    */
+
+real[int] xdelta = [0.0]; // coord x of point source
+real[int] ydelta = [0.0]; // coord y of point source
+real[int] cdelta=[dt*Q];  // value of point source
+matrix D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
+RHSQ[] = D*cdelta;
+
+varf FiltrationBilinearForm(p, phi) = 
+    int2d(Th)(Seps*p*phi) 
+    + int2d(Th)((dt*kr/mu)*grad(p)'*grad(phi)) 
+    + int1d(Th, labelF)((dt*kf/mu)*dx(p)*dx(phi))
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
+
+varf FiltrationLinearForm(p, phi) = 
+    int2d(Th)(Seps*pOld*phi)
+    + RHSQ[]
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
+
+varf BackstressBilinearForm(psi, khi) = 
+    int2d(Th)(grad(psi)'*grad(khi))
+    + on(labelR, psi=0)
+    + on(labelT, psi=0);
+
+varf BackstressLinearForm(psi, khi)=
+    - int2d(Th)(RHS*khi)
+    + on(labelR, psi=0)
+    + on(labelT, psi=0);

@@ -1,38 +1,16 @@
-// Laplace operator with RHS sum of Dirac 
-//  f = sum  cdelta_i \delta_i
-real[int] xdelta = [0.25,0.6];//  coord x de delta_i
-real[int] ydelta = [0.25,0.6];//  coord x de delta_j
-real[int] cdelta=[1.,2.];//  coef    delta_i
-mesh Th=square(10,10);
-verbosity=0;
+load "iovtk"
+int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 
-// Reference value for FFCS regression tests
-real ref;
-
-for(int iter=0;iter < 11;iter++)
-{
-
-    fespace Vh(Th,P1);     // P1 FE space
-    
-    matrix D = interpolate(Vh,xdelta,ydelta); // the interpolation matrix  
-    // at point (xdelta[j],ydelta[i] ) \hfilll
-    // so $D_ij = w^i((xdelta[j],ydelta[j]) $ where $w^i$ are the basic function of $V_h$. 
-
-    Vh uh,vh;  // unkown and test function. 
-    func g=0;                 //  boundary condition function
-    Vh b;
-    b[]= D*cdelta;
-    b[]= -b[];
-    problem laplace(uh,vh) =                    //  definion of  the problem 
-        int2d(Th)( dx(uh)*dx(vh) + dy(uh)*dy(vh) ) //  bilinear form
-        + b[]                         //  linear form of the rhs (so an array)
-        + on(1,2,3,4,uh=0) ;          //  boundary condition form
-
-    laplace; // solve the problem plot(uh); // to see the result
-    cout <<iter << "max uh = " << uh[].max << " nv =  "<< Th.nv <<  endl; 
-    plot(Th, uh,wait=1,dim=2,fill=1);
-    Th=adaptmesh(Th,uh,nbvx=100000,err= 0.01*1.15^-iter);
-
-    // Reference value for FFCS regression tests
-    ref=uh[]'*uh[];//'
-    }
+include "Parameters.edp"
+cout << Lfrac << endl;
+include "FiltrationMeshGen.edp"
+// plot(Th, wait=1);
+for(int i = 1; i<5; i++){
+    Lfrac = Lfrac + i*5;
+    include "FiltrationMeshGen.edp"
+    fespace Vh(Th, P2);
+    Vh f = sin(2*pi*x/L)*cos(2*pi*y/H);
+    savevtk("./Results/TestResults" + i + ".vtu", Th, f, dataname = "f", order=order);
+    // plot(Th, f, wait=1);
+}
+cout << Lfrac << endl;

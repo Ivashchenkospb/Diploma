@@ -1,0 +1,79 @@
+/*------------------------------------------------------------------------------------------*/
+
+/* Domain geometry and parameters *\
+|   for filtration and backstress  |
+\*          definition            */
+
+real L = 1500.0; /* [m] */
+real H = 1000.0; /* [m] */
+real Lfrac = 200.0; /* [m] */
+real kr = 1.0*1e-14; /* [m^2], Reservoir permeability */
+real kf = kr*1e5; /* [m^2], Fracture permeability */
+real mu = 1.0*1e-3; /* [Pa*s], Reservoir and fracture fluid viscosity */
+real fiPorosity = 0.2; /* [], Porosity */
+real E = 24.0*1e9; /* [Pa], Young modulus */
+real nu = 0.21; /* [], Poisson coef */
+real alpha = 0.7; /* [], Biot coef */
+real lambda=E*nu/(1.0+nu)/(1.0-nu); /* [Pa], Lame coef */
+real G=E/2.0/(1.0+nu); /* [Pa], Lame coef */
+real PP=lambda+2.0*G;
+real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
+real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
+real p0 = 26.4*1e6; /* [Pa], Outer pressure */
+real dt = 100.0; /* [s], Timestep */
+real tMax = 10000.0; /* [s], Maximal time */
+
+/*------------------------------------------------------------------------------------------*/
+
+/* Domain geometry and parameters *\
+\* for fracture width definition  */
+
+real rho0 = 2300.0;  
+real g = 9.80665;
+
+real[int] layerBorder = [ /* [m], Layer borders depth */
+    1500.0,
+    2650.0,
+    2690.0,
+    2700.0,
+    2750.0,
+    4000.0
+];
+
+int nLayer = layerBorder.n - 1; /* Number of layers */
+
+real[int] Ew = 1.0e9*[ /* [Pa], Young's modulus */
+    24.00,
+    24.00,
+    24.00,
+    24.00,
+    24.00
+];
+
+real[int] nuw = [ /* [], Poisson's ratio */
+    0.31,
+    0.21,
+    0.31,
+    0.21,
+    0.31
+];
+
+real[int] pr = 1.0e6 * [ /* [Pa], Reservoir pressure */
+    26.4,
+    26.4,
+    26.4,
+    26.4,
+    26.4
+];
+
+real[int] sB = 1.0e6*[ /* [Pa], Backstress in each layer */
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+];
+
+real penalty = 1.0e4*Ew[0];
+int maxIter = 40;                   /* Maximum number of nonlinear iterations */
+real tol = 1.0e-6;                  /* Tolerance for iteration stop criterion */

@@ -1,0 +1,31 @@
+/*  Fespace definition for  *\
+\*    elasticity problem    */
+
+fespace Wh(Thw, [P2, P2]);
+fespace Xh(Thw, P1);
+
+Wh [u, v];
+Wh [uIter, vIter];
+Wh [phiw, psiw];
+Xh Sxx, Syy, Txy;
+
+Xh pf = 26.4*1e6;
+Xh pEff = 0.0;
+Xh pNet = 0.0;
+
+Xh PrFunc = pr[0] * (x <= layerBorder[1]) + pr[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
+         + pr[2] * (x > layerBorder[2] && x <= layerBorder[3])+ pr[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
+         + pr[4] * (x > layerBorder[4]);
+Xh EFunc = Ew[0] * (x <= layerBorder[1]) + Ew[1] * (x > layerBorder[1] && x <= layerBorder[2])
+           + Ew[2] * (x > layerBorder[2] && x <= layerBorder[3]) + Ew[3] * (x > layerBorder[3] && x <= layerBorder[4])
+           + Ew[4] * (x > layerBorder[4]);
+Xh nuFunc = nuw[0] * (x <= layerBorder[1]) + nuw[1] * (x > layerBorder[1] && x <= layerBorder[2])
+            + nuw[2] * (x > layerBorder[2] && x <= layerBorder[3]) + nuw[3] * (x > layerBorder[3] && x <= layerBorder[4])
+            + nuw[4] * (x > layerBorder[4]);
+Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
+            + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
+            + sB[4] * (x > layerBorder[4]);
+Xh lambdaFunc = nuFunc*EFunc / ((1 + nuFunc) * (1 - 2*nuFunc));
+Xh muFunc = EFunc / (2 + 2*nuFunc);
+Xh sigmaVeff = rho0*g*x- alpha*PrFunc;
+Xh sigmaMin = -((nuFunc / (1 - nuFunc)) * (sigmaVeff) + alpha*PrFunc);
