@@ -27,6 +27,7 @@ real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
 real p0 = 26.4*1e6; /* [Pa], Outer pressure */
 real dt = 100.0; /* [s], Timestep */
 real tMax = 10000.0; /* [s], Maximal time */
+real kIc = 1.73*1e6; /* [Pa*m^0.5] Fracture toughness */
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -199,7 +200,7 @@ Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= 
 Xh lambdaFunc = nuFunc*EFunc / ((1 + nuFunc) * (1 - 2*nuFunc));
 Xh muFunc = EFunc / (2 + 2*nuFunc);
 Xh sigmaV = rho0*g*x;
-Xh sigmaMin = (nuFunc / (1 - nuFunc)) * (sigmaV - alpha*PrFunc) + alpha*PrFunc;
+Xh sigmaMin = -((nuFunc / (1 - nuFunc)) * (sigmaV - alpha*PrFunc) + alpha*PrFunc);
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -368,11 +369,21 @@ while(t < tMax){
     Sxx = lambdaFunc*div(u, v) + 2.0*muFunc*dx(u) - alpha*PrFunc;
     Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v) - alpha*PrFunc;
 
+    real ShAverage = -int1d(Thw, labelFrac)(Syy) / (xFracR - xFracL);
+
+    cout << endl;
+    cout << "  ShAverage = " << ShAverage << endl;
+    cout << "  pNet = " << pf - bsAverage - ShAverage << endl;
+    cout << 2*kIc/sqrt(pi*(layerBorder[4] - layerBorder[3])) << endl;
+    cout << endl;
+
     savevtk("./Results/ElasticityResultsWithPressure" + i + ".vtu", Thw, u, v, Syy, sigmaMin, dataname = "u v Syy Smin", order=order);
-    savevtk("./Results/solQ" + i + ".vtu", Th, p, sBfull, psi, psix, psiy, deltaSx, deltaSxTot, deltaSy, deltaSyTot,
-            dataname = "p Backstress psi u v Sx SxTot Sy SyTot", order=order);
+    // savevtk("./Results/solQ" + i + ".vtu", Th, p, sBfull, psi, psix, psiy, deltaSx, deltaSxTot, deltaSy, deltaSyTot,
+    //         dataname = "p Backstress psi u v Sx SxTot Sy SyTot", order=order);
 
     pOld = p;
     t = t + dt;
     i = i + 1;
 }
+
+

@@ -199,7 +199,7 @@ Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= 
 Xh lambdaFunc = nuFunc*EFunc / ((1 + nuFunc) * (1 - 2*nuFunc));
 Xh muFunc = EFunc / (2 + 2*nuFunc);
 Xh sigmaV = rho0*g*x;
-Xh sigmaMin = (nuFunc / (1 - nuFunc)) * (sigmaV - alpha*PrFunc) + alpha*PrFunc;
+Xh sigmaMin = -((nuFunc / (1 - nuFunc)) * (sigmaV - alpha*PrFunc) + alpha*PrFunc);
 
 /*------------------------------------------------------------------------------------------*/
 

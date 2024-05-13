@@ -25,8 +25,8 @@ real PP=lambda+2.0*G;
 real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
 real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
 real p0 = 26.4*1e6; /* [Pa], Outer pressure */
-real dt = 100.0; /* [s], Timestep */
-real tMax = 1000.0; /* [s], Maximal time */
+real dt = 3600.0; /* [s], Timestep */
+real tMax = 86400.0*10; /* [s], Maximal time */
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -35,7 +35,8 @@ real tMax = 1000.0; /* [s], Maximal time */
 
 real rho0 = 2300.0;  
 real g = 9.80665;
-real pf = 17.0*1e6; /* Pa, Fracture pressure */
+// real pf = 17.0*1e6; /* Pa, Fracture pressure */
+// real pNet = 0;
 
 real[int] layerBorder = [ /* [m], Layer borders depth */
     1500.0,
@@ -80,8 +81,8 @@ real[int] sB = 1.0e6*[ /* [Pa], Backstress in each layer */
     0.0
 ];
 
-real penalty = 1.0e5*Ew[0];
-int maxIter = 10;                   /* Maximum number of nonlinear iterations */
+real penalty = 1.0e4*Ew[0];
+int maxIter = 40;                   /* Maximum number of nonlinear iterations */
 real tol = 1.0e-6;                  /* Tolerance for iteration stop criterion */
 
 /*------------------------------------------------------------------------------------------*/
@@ -184,9 +185,12 @@ Wh [uIter, vIter];
 Wh [phiw, psiw];
 Xh Sxx, Syy, Txy;
 
-// Xh PrFunc = pr[0] * (x <= layerBorder[1]) + pr[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
-//          + pr[2] * (x > layerBorder[2] && x <= layerBorder[3])+ pr[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
-//          + pr[4] * (x > layerBorder[4]);
+Xh pf = 26.4*1e6;
+Xh pNet = 0.0;
+
+Xh PrFunc = pr[0] * (x <= layerBorder[1]) + pr[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
+         + pr[2] * (x > layerBorder[2] && x <= layerBorder[3])+ pr[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
+         + pr[4] * (x > layerBorder[4]);
 Xh EFunc = Ew[0] * (x <= layerBorder[1]) + Ew[1] * (x > layerBorder[1] && x <= layerBorder[2])
            + Ew[2] * (x > layerBorder[2] && x <= layerBorder[3]) + Ew[3] * (x > layerBorder[3] && x <= layerBorder[4])
            + Ew[4] * (x > layerBorder[4]);
@@ -199,7 +203,28 @@ Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= 
 Xh lambdaFunc = nuFunc*EFunc / ((1 + nuFunc) * (1 - 2*nuFunc));
 Xh muFunc = EFunc / (2 + 2*nuFunc);
 Xh sigmaV = rho0*g*x;
-// Xh sigmaMin = (nuFunc / (1 - nuFunc)) * (sigmaV - alpha*PrFunc) + alpha*PrFunc;
+Xh sigmaMin = -((nuFunc / (1 - nuFunc)) * (sigmaV - alpha*PrFunc) + alpha*PrFunc);
+
+plot(Thw, pf, wait=1, fill=1, dim=2);
+plot(Thw, pNet, wait=1, fill=1, dim=2);
+plot(Thw, sBFunc, wait=1, fill=1, dim=2);
+plot(Thw, sigmaMin, wait=1, fill=1, dim=2);
+exit(0);
+
+/* ShAverage computation */
+real step = 0.1;
+int nPoints = int((layerBorder[4]-layerBorder[3])/step);
+real[int] xx(nPoints);
+real[int] sH(nPoints);
+real ShAverage = 0;
+for(int i=0; i<nPoints; i++){
+    xx[i] = layerBorder[3] + i*step;
+    sH[i] = sigmaMin(xx[i], 0);
+}
+for(int i=1; i<sH.n; i++){
+    ShAverage += sH[i];
+}
+ShAverage = -ShAverage*step/(layerBorder[4]-layerBorder[3]);
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -267,7 +292,7 @@ varf RhsLinearForm([u, v], [phiw, psiw]) =
         rho0*g*phiw
     )
     + int1d(Thw, labelFrac)(
-        (pf - sBFunc)*psiw
+        pNet*psiw
     )
     + int1d(Thw, labelLeft)(
         sigmaV*phiw
@@ -292,7 +317,6 @@ int nOmega = omega.n;
 
 int i = 0;
 real t = 0;
-
 [uIter, vIter] = [0.0, 0.0];
 
 int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
@@ -304,29 +328,29 @@ while(t < tMax){
     RHS = alpha*(p-pOld)/PP;
     real[int] bB = BackstressLinearForm(0, Vh);
     psi[] = BB^-1*bB;
-
     psix = dx(psi);
     psiy = dy(psi);
     psixx = dx(psix);
     psiyy = dy(psiy);
-
     deltaSx = lambda*(psixx+psiyy)+2*G*psixx;
     deltaSxTot = deltaSx-alpha*(p-pOld);
     deltaSy = lambda*(psixx+psiyy)+2*G*psiyy;
     deltaSyTot = deltaSy-alpha*(p-pOld);
-
     sBfull = sBfull + deltaSyTot;
     real bsAverage = -int1d(Th, labelF)(sBfull)/Lfrac;
     sB[3] = bsAverage;
     pf = int1d(Th, labelF)(p)/Lfrac;
 
     cout << "Time = " << t << " s" << endl;
-    cout << "Backstress = " << bsAverage << endl;
     cout << "On frac pressure = " << pf << endl;
+    cout << "Backstress = " << bsAverage << endl;
+    cout << "sigmaMin = " << ShAverage << endl;
+    cout << "Pnet = " << pf - bsAverage - ShAverage << endl;
 
     Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
-            + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
-            + sB[4] * (x > layerBorder[4]);
+              + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
+              + sB[4] * (x > layerBorder[4]);
+    pNet = pf - ShAverage - bsAverage;
     real[int] bw = RhsLinearForm(0, Wh);
 
     real absErrorL2 = 1.0;
@@ -353,14 +377,18 @@ while(t < tMax){
             iOmega += 1;  
         }
 
-        cout << "    relaxation parameter = " << omega[iOmega] << " (" << iOmega + 1 << " / " << nOmega << ")" << endl;
-        cout << "    iteration = " << count << " (" << maxIter << ")" << endl;
-        cout << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
+        // cout << "    relaxation parameter = " << omega[iOmega] << " (" << iOmega + 1 << " / " << nOmega << ")" << endl;
+        // cout << "    iteration = " << count << " (" << maxIter << ")" << endl;
+        // cout << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
     }
 
-    savevtk("./Results/ElasticityResults" + i + ".vtu", Thw, u, v, dataname = "u v", order=order);
-    savevtk("./Results/solQ" + i + ".vtu", Th, p, sBfull, psi, psix, psiy, deltaSx, deltaSxTot, deltaSy, deltaSyTot,
-            dataname = "p Backstress psi u v Sx SxTot Sy SyTot", order=order);
+    Sxx = lambdaFunc*div(u, v) + 2.0*muFunc*dx(u);
+    Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
+
+    savevtk("./Results/ElasticityResults" + i + ".vtu", Thw, u, v, Syy, sigmaMin, dataname = "u v Syy Smin", order=order);
+    // savevtk("./Results/solQ" + i + ".vtu", Th, p, sBfull, psi, psix, psiy, deltaSx, deltaSxTot, deltaSy, deltaSyTot,
+    //         dataname = "p Backstress psi u v Sx SxTot Sy SyTot", order=order);
+    cout << endl;
 
     pOld = p;
     t = t + dt;
