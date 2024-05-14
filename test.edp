@@ -1,16 +1,77 @@
 load "iovtk"
-int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+load "pipe"
+load "MUMPS_seq"
+include "gnuplotInterface.edp"
 
 include "Parameters.edp"
-cout << Lfrac << endl;
-include "FiltrationMeshGen.edp"
-// plot(Th, wait=1);
-for(int i = 1; i<5; i++){
-    Lfrac = Lfrac + i*5;
-    include "FiltrationMeshGen.edp"
-    fespace Vh(Th, P2);
-    Vh f = sin(2*pi*x/L)*cos(2*pi*y/H);
-    savevtk("./Results/TestResults" + i + ".vtu", Th, f, dataname = "f", order=order);
-    // plot(Th, f, wait=1);
+
+int NN = 50;
+
+int labelF = 1; /* fracture */
+int labelB = 2; /* Bottom */
+int labelR = 3; /* Right hand side of domain */
+int labelT = 4; /* Top of domain */
+int labelL = 5; /* Left hand side of domain */
+
+real[int] xP = [0.0, L, L, 0.0]; /* enumeration of xcoords */
+real[int] yP = [0.0, 0.0, H, H]; /* enumeration of ycoords */
+
+int[int] nGamma = [10*1, H/L, L/L, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+int[int] labelGamma = [labelB, labelR, labelT, labelL];
+
+border GammaDomain(t = 0.0, 1.0; i)    /*i - number of boundary(label), t - parameter*/
+{
+    int iNext = (i+1) % nGamma.n;   /* .n - the length of the nGamma massive*/
+
+    x = xP[i]*(1-t) + xP[iNext]*t;
+    y = yP[i]*(1-t) + yP[iNext]*t;
+    label = labelGamma[i]; /* the flag of the boundary */
 }
-cout << Lfrac << endl;
+
+mesh Th = buildmesh(GammaDomain(nGamma));
+// plot(Th);
+
+fespace Vh(Th, P2);
+Vh p, phi;
+Vh pOld;
+Vh RHSQ;
+pOld = p0;
+
+macro grad(p)[dx(p), dy(p)] // EOM
+
+real[int] xdelta = [0.0]; // coord x of point source
+real[int] ydelta = [0.0]; // coord y of point source
+real[int] cdelta=[dt*Q];  // value of point source
+matrix D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
+RHSQ[] = D*cdelta;
+
+varf FiltrationBilinearForm(p, phi) = 
+    int2d(Th)(Seps*p*phi) 
+    + int2d(Th)((dt*kr/mu)*grad(p)'*grad(phi)) 
+    + int1d(Th, labelB)((dt*kf/mu)*dx(p)*dx(phi)*(x <= Lfrac))
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
+
+varf FiltrationLinearForm(p, phi) = 
+    int2d(Th)(Seps*pOld*phi)
+    + RHSQ[]
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
+
+int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+int i = 0;
+real t = 0.0;
+real deltaH = 5.0;
+while(t < tMax){
+    cout << t << endl;
+    Lfrac += deltaH;
+    matrix A = FiltrationBilinearForm(Vh, Vh);
+    set(A, solver = sparsesolver);
+    real[int] b = FiltrationLinearForm(0, Vh);
+    p[] = A^-1*b;
+    pOld = p;
+    t = t + dt;
+    i = i + 1;
+    // plot(Th, p, wait=1, fill=1, dim=2);
+    savevtk("./Results/FracGrowth" + i + ".vtu", Th, p, dataname = "p", order=order);
+    }

@@ -22,6 +22,7 @@ real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
 real p0 = 26.4*1e6; /* [Pa], Outer pressure */
 real dt = 100.0; /* [s], Timestep */
 real tMax = 10000.0; /* [s], Maximal time */
+real KIc = 1.73*1e6; /* [Pa*m^0.5] Fracture toughness */
 
 /*------------------------------------------------------------------------------------------*/
 
