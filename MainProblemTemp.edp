@@ -8,7 +8,7 @@ include "Parameters.edp"
 /*  Domain definition and mesh generation   *\
 \* for filtration and backstress definition */
 
-int NN = 30;
+int NN = 50;
 
 int labelB = 1; /* Bottom */
 int labelR = 2; /* Right hand side of domain */
@@ -18,7 +18,7 @@ int labelL = 4; /* Left hand side of domain */
 real[int] xP = [0.0, L, L, 0.0]; /* enumeration of xcoords */
 real[int] yP = [0.0, 0.0, H, H]; /* enumeration of ycoords */
 
-int[int] nGamma = [10*1, H/L, L/L, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+int[int] nGamma = [10*1, H/L, 1, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
 int[int] labelGamma = [labelB, labelR, labelT, labelL];
 
 border GammaDomain(t = 0.0, 1.0; i)    /*i - number of boundary(label), t - parameter*/
@@ -259,7 +259,7 @@ while(t < tMax){
     pNet = pf - sigmaMin - sBFunc;
     pNetAverage = int1d(Thw, labelFrac2)(pNet) / (layerBorder[4] - layerBorder[3]);
     if(pNetAverage >= 2*KIc/sqrt(pi*(layerBorder[4] - layerBorder[3]))){
-        Lfrac += 1;
+        Lfrac += 2;
     }
 
     real absErrorL2 = 1.0;
@@ -299,8 +299,8 @@ while(t < tMax){
     // Sxx = lambdaFunc*div(u, v) + 2.0*muFunc*dx(u);
     Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
 
-    savevtk("./Results/NewResults" + i + ".vtu", Thw, u, v, Syy, -sigmaMin, pNet, pEff, dataname = "u v Syy Smin pNet pEff", order=order);
-    savevtk("./Results/FiltrationResults" + i + ".vtu", Th, p, sBfull, psi, dataname = "p Backstress psi ", order=order);
+    savevtk("./Results/NewResultsTemp" + i + ".vtu", Thw, u, v, Syy, -sigmaMin, pNet, pEff, dataname = "u v Syy Smin pNet pEff", order=order);
+    savevtk("./Results/FiltrationResultsTemp" + i + ".vtu", Th, p, sBfull, psi, dataname = "p Backstress psi ", order=order);
 
     pOld = p;
     t = t + dt;
