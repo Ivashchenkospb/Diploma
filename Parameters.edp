@@ -19,7 +19,7 @@ real G=E/2.0/(1.0+nu); /* [Pa], Lame coef */
 real PP=lambda+2.0*G;
 real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
 real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
-real Q = 5.8*1e-6;
+// real Q = 5.8*1e-6;
 real p0 = 26.4*1e6; /* [Pa], Outer pressure */
 real dt = 500.0; /* [s], Timestep */
 real tMax = 100000.0; /* [s], Maximal time */

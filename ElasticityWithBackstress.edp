@@ -1,7 +1,7 @@
 real alpha = 0.7;
 real rho0 = 2300.0;  
 real g = 9.80665;
-real pf = 17.0*1e6; /* Pa, Fracture pressure */
+real pf = 30.0*1e6; /* Pa, Fracture pressure */
 
 
 real[int] layerBorder = [   /* [m], Layer borders depth            */
@@ -97,7 +97,8 @@ border GammaDomain( t = 0.0, 1.0; i ) {
 
 mesh Th = buildmesh(GammaDomain(nGamma));
 
-// plot(Th, GammaDomain(nGamma), wait=1, dim=2);
+plot(Th, wait=1, dim=2);
+cout << "Old mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
 
 /* Fespace definition */
 fespace Vh(Th, [P2, P2]);
@@ -151,7 +152,7 @@ varf RhsLinearForm([u, v], [phi, psi]) =
         rho0*g*phi
     )
     + int1d(Th, labelFrac)(
-        (pf - sBFunc)*psi
+        (pf - alpha*PrFunc - sBFunc)*psi
     )
     + int1d(Th, labelLeft)(
         sigmaV*phi

@@ -16,7 +16,9 @@ int labelL = 5; /* Left hand side of domain */
 real[int] xP = [0.0, L, L, 0.0]; /* enumeration of xcoords */
 real[int] yP = [0.0, 0.0, H, H]; /* enumeration of ycoords */
 
-int[int] nGamma = [10*1, H/L, L/L, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+int[int] nGamma = [1, H/L, 1, H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+// int[int] nGamma = [10*1, H/L, L/L, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+
 int[int] labelGamma = [labelB, labelR, labelT, labelL];
 
 border GammaDomain(t = 0.0, 1.0; i)    /*i - number of boundary(label), t - parameter*/
@@ -29,7 +31,12 @@ border GammaDomain(t = 0.0, 1.0; i)    /*i - number of boundary(label), t - para
 }
 
 mesh Th = buildmesh(GammaDomain(nGamma));
-// plot(Th);
+cout << "Old mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
+plot(Th, wait=1, cmm="Old mesh");
+// exit(0);
+Th = splitmesh(Th, 1 + 2*((x <= 1000.0)*(y <= 500.0)));
+cout << "New mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
+plot(Th, wait=1, cmm="New mesh");
 
 fespace Vh(Th, P2);
 Vh p, phi;
@@ -61,10 +68,10 @@ varf FiltrationLinearForm(p, phi) =
 int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 int i = 0;
 real t = 0.0;
-real deltaH = 5.0;
+// real deltaH = 5.0;
 while(t < tMax){
-    cout << t << endl;
-    Lfrac += deltaH;
+    cout << "t = " << t << endl;
+    // Lfrac += deltaH;
     matrix A = FiltrationBilinearForm(Vh, Vh);
     set(A, solver = sparsesolver);
     real[int] b = FiltrationLinearForm(0, Vh);
@@ -73,5 +80,5 @@ while(t < tMax){
     t = t + dt;
     i = i + 1;
     // plot(Th, p, wait=1, fill=1, dim=2);
-    savevtk("./Results/FracGrowth" + i + ".vtu", Th, p, dataname = "p", order=order);
+    savevtk("./Results/FracGrowthNewMesh" + i + ".vtu", Th, p, dataname = "p", order=order);
     }
