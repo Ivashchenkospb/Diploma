@@ -19,7 +19,7 @@ real G=E/2.0/(1.0+nu); /* [Pa], Lame coef */
 real PP=lambda+2.0*G;
 real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
 real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
-// real Q = 5.8*1e-6;
+// real Q = 4*5.8*1e-6;
 real p0 = 26.4*1e6; /* [Pa], Outer pressure */
 real dt = 500.0; /* [s], Timestep */
 real tMax = 100000.0; /* [s], Maximal time */
@@ -34,15 +34,16 @@ real rho0 = 2300.0;
 real g = 9.80665;
 
 real[int] layerBorder = [ /* [m], Layer borders depth */
-    1500.0,
+    2350.0,
     2650.0,
     2690.0,
     2700.0,
     2750.0,
-    4000.0
+    3050.0
 ];
 
 int nLayer = layerBorder.n - 1; /* Number of layers */
+real HProdLayer = layerBorder[4] - layerBorder[3];
 
 real[int] Ew = 1.0e9*[ /* [Pa], Young's modulus */
     24.00,
@@ -79,3 +80,6 @@ real[int] sB = 1.0e6*[ /* [Pa], Backstress in each layer */
 real penalty = 1.0e4*Ew[0];
 int maxIter = 40;                   /* Maximum number of nonlinear iterations */
 real tol = 1.0e-6;                  /* Tolerance for iteration stop criterion */
+
+real Sned = (pi*HProdLayer*(1-nu*nu)) / (4 * E);
+cout << 0.003/Sned << endl;

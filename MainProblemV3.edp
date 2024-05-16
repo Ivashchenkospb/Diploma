@@ -1,0 +1,468 @@
+load "iovtk"
+load "pipe"
+load "MUMPS_seq"
+include "gnuplotInterface.edp"
+
+include "Parameters.edp"
+
+/*  Domain definition and mesh generation   *\
+\* for filtration and backstress definition */
+
+int NN = 10;
+
+int labelB = 1; /* Bottom */
+int labelR = 2; /* Right hand side of domain */
+int labelT = 3; /* Top of domain */
+int labelL = 4; /* Left hand side of domain */
+
+real[int] xP = [0.0, L, L, 0.0]; /* enumeration of xcoords */
+real[int] yP = [0.0, 0.0, H, H]; /* enumeration of ycoords */
+
+int[int] nGamma = [1, H/L, 1, H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+// int[int] nGamma = [10*1, H/L, L/L, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+
+int[int] labelGamma = [labelB, labelR, labelT, labelL];
+
+border GammaDomain(t = 0.0, 1.0; i)    /*i - number of boundary(label), t - parameter*/
+{
+    int iNext = (i+1) % nGamma.n;   /* .n - the length of the nGamma massive*/
+
+    x = xP[i]*(1-t) + xP[iNext]*t;
+    y = yP[i]*(1-t) + yP[iNext]*t;
+    label = labelGamma[i]; /* the flag of the boundary */
+}
+
+mesh Th = buildmesh(GammaDomain(nGamma));
+// cout << "Old mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
+// plot(Th, wait=1, cmm="Old mesh");
+
+real hMeshFiltr = H;
+real lMeshFiltr = L;
+for(int i = 0; i < 7; i++){
+    hMeshFiltr /= 2.0;
+    lMeshFiltr /= 1.2;
+    Th = splitmesh(Th, 1 + 1*((x <= lMeshFiltr)*(y <= hMeshFiltr)));
+    // plot(Th, wait=1, cmm="New mesh"+i);
+    // cout << "New mesh" << i << "    Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
+}
+// plot(Th);
+// exit(0);
+
+/*   Domain definition and mesh generation  *\
+\*      for fracture width definition       */
+
+real frcS = 20.0;
+int NNN = 10;
+
+real xMin = layerBorder[0];
+real xFracL = layerBorder[2] - frcS;
+real xFracR = layerBorder[4] + frcS;
+real xMax = layerBorder[5];
+
+real yMax = (xMin + xMax) / 2.0 / 2.0 / 2.0;
+real Hsize = xMax - xMin;
+real Hfrac = xFracR - xFracL;
+cout << yMax << endl;
+cout << Hsize << endl;
+
+real[int] xPw = [xMin, xFracL, xFracR, xMax, xMax, xMin];
+real[int] yPw = [0, 0, 0, 0, yMax, yMax];
+
+int[int] nGammaW = [(xFracL - xMin)/Hsize, 
+                   (xFracR - xFracL)/Hsize,
+                   (xMax - xFracR)/Hsize,
+                   yMax/Hsize, 1, yMax/Hsize] * NNN;
+
+int labelBottom = 1;
+int labelFrac = 2;
+int labelRight = 3;
+int labelTop = 4;
+int labelLeft = 5;
+int[int] labelGammaW = [labelBottom, labelFrac, labelBottom,
+                        labelRight, labelTop, labelLeft];
+
+border GammaDomainW( t = 0.0, 1.0; i ) {
+    int iNext = (i + 1)%nGammaW.n;
+    x = xPw[i]*(1.0 - t) + xPw[iNext]*t;
+    y = yPw[i]*(1.0 - t) + yPw[iNext]*t;
+    label = labelGammaW[i];
+}
+// cout << nGammaW << endl;
+
+mesh Thw = buildmesh(GammaDomainW(nGammaW));
+// plot(Thw, wait=1, dim=2, cmm="Old mesh");
+// cout << "Old mesh   " << "Nt = " << Thw.nt << "  Nv = " << Thw.nv << endl;
+real hMeshElast = yMax;
+real lMeshElast = Hfrac;
+for(int i = 0; i < 7; i++){
+    hMeshElast /= 2.0;
+    Thw = splitmesh(Thw, 1 + 1*(y <= hMeshElast)*(x <= (xFracR + lMeshElast) && x >= (xFracL - lMeshElast)));
+    lMeshElast /= 2.0;
+    // plot(Thw, wait=1, dim=2, cmm="Old mesh");
+    // cout << "New mesh" << i << "   Nt = " << Thw.nt << "  Nv = " << Thw.nv << endl;
+    } 
+// Thw = splitmesh(Thw, 1 + 2*(y <= 50)*(x <= xFracR && x >= xFracL));
+// cout << "New mesh   " << "Nt = " << Thw.nt << "  Nv = " << Thw.nv << endl;
+// plot(Thw, wait=1, dim=2, cmm="New mesh");
+
+// fespace Mh(Thw, P1);
+// Mh f = 1.0;
+// load "iovtk"
+// int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+// savevtk("./Mesh.vtu", Thw, f, dataname = "f", order=order);
+// exit(0);
+
+/*  Fespace definition for   *\
+\* filtration and backstress */
+
+fespace Vh(Th, P2);
+Vh p, phi;
+Vh pOld;
+Vh RHSQ;
+pOld = p0;
+
+Vh psi, khi;
+Vh RHS = alpha*(p-p0)/PP;
+Vh psix, psiy, psixx, psiyy, psixy, psiyx;
+Vh deltaSx, deltaSxTot, deltaSy, deltaSyTot, deltaSxy;
+
+Vh sigmaB = 0.0;
+Vh sigmaBTemp;
+Vh sigmaH, sigmaBIter, wIter, wOld;
+wIter = 1.4*1e-3;
+wOld = 1.4*1e-3;
+
+
+/*  Fespace definition for  *\
+\*    elasticity problem    */
+
+fespace Wh(Thw, [P2, P2]);
+fespace Xh(Thw, P1);
+
+Wh [u, v];
+Wh [uIter, vIter];
+Wh [phiw, psiw];
+// Xh Sxx;
+Xh Syy;
+
+Xh pf = 26.4*1e6;
+Xh pEff = 0.0;
+Xh pNet = 0.0;
+
+Xh PrFunc = pr[0] * (x <= layerBorder[1]) + pr[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
+         + pr[2] * (x > layerBorder[2] && x <= layerBorder[3])+ pr[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
+         + pr[4] * (x > layerBorder[4]);
+Xh EFunc = Ew[0] * (x <= layerBorder[1]) + Ew[1] * (x > layerBorder[1] && x <= layerBorder[2])
+           + Ew[2] * (x > layerBorder[2] && x <= layerBorder[3]) + Ew[3] * (x > layerBorder[3] && x <= layerBorder[4])
+           + Ew[4] * (x > layerBorder[4]);
+Xh nuFunc = nuw[0] * (x <= layerBorder[1]) + nuw[1] * (x > layerBorder[1] && x <= layerBorder[2])
+            + nuw[2] * (x > layerBorder[2] && x <= layerBorder[3]) + nuw[3] * (x > layerBorder[3] && x <= layerBorder[4])
+            + nuw[4] * (x > layerBorder[4]);
+Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
+            + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
+            + sB[4] * (x > layerBorder[4]);
+Xh lambdaFunc = nuFunc*EFunc / ((1 + nuFunc) * (1 - 2*nuFunc));
+Xh muFunc = EFunc / (2 + 2*nuFunc);
+Xh sigmaVeff = rho0*g*x - alpha*PrFunc;
+Xh sigmaMin = (nuFunc / (1 - nuFunc)) * (sigmaVeff) + alpha*PrFunc;
+
+sigmaH = int1d(Thw, labelFrac)(sigmaMin*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
+
+macro grad(p)[dx(p), dy(p)] // EOM
+
+/*  Weak problem formulation for   *\
+\*    filtration and backstress    */
+
+real[int] xdelta = [0.0]; // coord x of point source
+real[int] ydelta = [0.0]; // coord y of point source
+real[int] cdelta=[dt*Q];  // value of point source
+matrix D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
+RHSQ[] = D*cdelta;
+
+varf FiltrationBilinearForm(p, phi) = 
+    int2d(Th)(Seps*p*phi) 
+    + int2d(Th)((dt*kr/mu)*grad(p)'*grad(phi))
+    + int1d(Th, labelB)(Sned*p*phi*(x <= Lfrac))
+    + int1d(Th, labelB)((dt*(wIter^3)/(3*mu))*dx(p)*dx(phi)*(x <= Lfrac))
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
+
+varf FiltrationBilinearFormInit(p, phi) = 
+    int2d(Th)(Seps*p*phi) 
+    + int2d(Th)((dt*kr/mu)*grad(p)'*grad(phi))
+    + int1d(Th, labelB)((dt*kf/mu)*dx(p)*dx(phi)*(x <= Lfrac))
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
+
+varf FiltrationLinearForm(p, phi) = 
+    int2d(Th)(Seps*pOld*phi)
+    + int1d(Th, labelB)((Sned*(sigmaH + sigmaBIter) + wOld)*phi*(x <= Lfrac))
+    + RHSQ[]
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
+
+varf FiltrationLinearFormInit(p, phi) = 
+    int2d(Th)(Seps*pOld*phi)
+    + RHSQ[]
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
+
+varf BackstressBilinearForm(psi, khi) = 
+    int2d(Th)(grad(psi)'*grad(khi))
+    + on(labelR, psi=0)
+    + on(labelT, psi=0);
+
+varf BackstressLinearForm(psi, khi)=
+    - int2d(Th)(RHS*khi)
+    + on(labelR, psi=0)
+    + on(labelT, psi=0);
+
+/*  Weak problem formulation for   *\
+\*    fracture width definition    */
+
+real sqrt2 = sqrt(2.0);
+macro div(u, v) (dx(u) + dy(v)) // EOM
+macro epsilon(u, v) [dx(u), dy(v), (dy(u) + dx(v))/sqrt2] // EOM
+
+varf ElasticityBilinearForm([u, v], [phiw, psiw]) = 
+    int2d(Thw)(
+        lambdaFunc*div(u,v)*div(phiw, psiw) + 2.0*muFunc*epsilon(u, v)'*epsilon(phiw, psiw)
+    )
+    + on(labelBottom, v = 0.0)
+    + on(labelRight, u = 0.0)
+    + on(labelTop, v = 0.0);
+
+varf PenaltyBilinearForm([u, v], [phiw, psiw]) =
+    int1d(Thw, labelFrac)(
+        penalty*v*(vIter < 0.0)*psiw
+    )
+    + on(labelBottom, v = 0.0)
+    + on(labelRight, u = 0.0)
+    + on(labelTop, v = 0.0);
+
+varf RhsLinearForm([u, v], [phiw, psiw]) = 
+    int2d(Thw)(
+        rho0*g*phiw
+    )
+    + int1d(Thw, labelFrac)(
+        pEff*psiw*(x <= layerBorder[4] && x >= layerBorder[3]) 
+        + (1 - (x <= layerBorder[4] && x >= layerBorder[3]))*pEff*(vIter > 0.0)*psiw
+    )
+    + int1d(Thw, labelLeft)(
+        sigmaVeff*phiw
+    )
+    + on(labelBottom, v = 0.0)
+    + on(labelRight, u = 0.0)
+    + on(labelTop, v = 0.0);
+
+
+/*---------------------------------- MAIN CYCLE ----------------------------------*/
+
+matrix Ae = ElasticityBilinearForm(Wh, Wh);
+matrix BB = BackstressBilinearForm(Vh, Vh);
+
+real[int] omega = [1.0, 0.75, 0.5, 0.3];
+int nOmega = omega.n;
+int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+real pNetAverage = 0;
+real pNetCrit = 2*KIc/sqrt(pi*(layerBorder[4] - layerBorder[3]));
+real FracPressure = p0;
+real wAverage = 0.0;
+real bsAverage = 0.0;
+
+int i = 0;
+real t = 0;
+bool nonlinearFlag = 0;
+while(t < tMax){
+    real cpu = clock();
+
+    cout << endl;
+    cout << "Time = " << t << " s" << endl;
+    cout << "Lfrac = " << Lfrac << endl;
+    cout << "Pnet = " << pNetAverage << "    PnetCrit = " << pNetCrit << endl;
+    cout << "Frac pressure = " << FracPressure << endl;
+    cout << "Backstress = " << bsAverage << endl;
+    cout << "Nonlinear - " << nonlinearFlag << endl;
+
+    if(nonlinearFlag){
+        wIter = 1.4*1e-3;
+        sigmaBIter = bsAverage;
+        real absErrorL2Filtration = 1.0;
+        real normL2Filtration = 1.0;
+        real relErrorL2Filtration = 1.0;
+        int countFiltration = 0;
+        int iOmegaFiltration = 0;
+
+        cout << endl;
+        cout << "Starting nonlinear iterations" << endl;
+        while (relErrorL2Filtration > 1.0e-6 && countFiltration < maxIter) {
+
+            matrix A = FiltrationBilinearForm(Vh, Vh);
+            set(A, solver = sparsesolver);
+            real[int] b = FiltrationLinearForm(0, Vh);
+            p[] = A^-1*b;
+            FracPressure = int1d(Th, labelB)(p*(x <= Lfrac))/Lfrac;
+            pf = FracPressure;
+
+            RHS = alpha*(p-pOld)/PP;
+            real[int] bB = BackstressLinearForm(0, Vh);
+            psi[] = BB^-1*bB;
+
+            psix = dx(psi);
+            psiy = dy(psi);
+            psixx = dx(psix);
+            psiyy = dy(psiy);
+            deltaSy = lambda*(psixx+psiyy)+2*G*psiyy;
+            deltaSyTot = deltaSy-alpha*(p-pOld);
+            sigmaBTemp = sigmaB + deltaSyTot;
+
+            bsAverage = -int1d(Th, labelB)(sigmaBTemp*(x <= Lfrac))/Lfrac;
+            sB[3] = bsAverage;
+            sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
+                    + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
+                    + sB[4] * (x > layerBorder[4]);
+
+
+            pEff = pf - alpha*PrFunc - sBFunc;
+            pNet = pf - sigmaMin - sBFunc;
+            pNetAverage = int1d(Thw, labelFrac)(pNet*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
+
+            real absErrorL2 = 1.0;
+            real normL2 = 1.0;
+            real relErrorL2 = 1.0;
+            int count = 0;
+            int iOmega = 0;
+            [uIter, vIter] = [0.0, 0.0];
+
+            while (relErrorL2 > tol && count < maxIter) {
+                matrix Ap = PenaltyBilinearForm(Wh, Wh);
+                matrix Aw = Ae + Ap;
+                real[int] bw = RhsLinearForm(0, Wh);
+                set(Aw, solver=sparsesolver);
+                u[] = Aw^-1*bw;
+                
+                normL2 = sqrt(int2d(Thw)(v^2));
+                absErrorL2 = sqrt(int2d(Thw)((v - vIter)^2));
+                relErrorL2 = absErrorL2 / normL2;
+
+                uIter[] = omega[iOmega]*u[] + (1.0 - omega[iOmega])*uIter[];
+                ++ count;
+
+                if (count == maxIter && relErrorL2 > tol && iOmega + 1 < nOmega) {
+                    count = 0;
+                    iOmega += 1;  
+                }
+
+                cout << "       (" << count << ")    "<< omega[iOmega] << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
+            }
+
+            wAverage = int1d(Thw, labelFrac)(v*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
+            Vh Backstress = bsAverage;
+            Vh halfWidth = wAverage;
+
+            cout << "On frac pressure = " << FracPressure << endl;
+            cout << "BsAverage = " << bsAverage << endl;
+            cout << "wAverage = " << wAverage << endl;
+
+            normL2Filtration = sqrt(int2d(Th)(Backstress^2 + halfWidth^2));
+            absErrorL2Filtration = sqrt(int2d(Th)((Backstress - sigmaBIter)^2 + (halfWidth - wIter)^2));
+            relErrorL2Filtration = absErrorL2Filtration / normL2Filtration;
+            cout << "   (" << countFiltration << ")" << "    rel_error_L2_Filtration = " << relErrorL2Filtration << endl;
+
+            wIter = omega[iOmegaFiltration]*halfWidth + (1.0 - omega[iOmegaFiltration])*wIter;
+            sigmaBIter = omega[iOmegaFiltration]*Backstress+ (1.0 - omega[iOmegaFiltration])*sigmaBIter;
+            countFiltration += 1;
+
+            if (countFiltration == maxIter && relErrorL2Filtration > tol && iOmegaFiltration + 1 < nOmega) {
+                    countFiltration = 0;
+                    iOmegaFiltration += 1;  
+                }
+
+        }
+        sigmaB = sigmaBTemp;
+    }
+    else{
+        matrix A = FiltrationBilinearFormInit(Vh, Vh);
+        set(A, solver = sparsesolver);
+        real[int] b = FiltrationLinearFormInit(0, Vh);
+        p[] = A^-1*b;
+        FracPressure = int1d(Th, labelB)(p*(x <= Lfrac))/Lfrac;
+        pf = FracPressure;
+
+        RHS = alpha*(p-pOld)/PP;
+        real[int] bB = BackstressLinearForm(0, Vh);
+        psi[] = BB^-1*bB;
+        psix = dx(psi);
+        psiy = dy(psi);
+        psixx = dx(psix);
+        psiyy = dy(psiy);
+        deltaSy = lambda*(psixx+psiyy)+2*G*psiyy;
+        deltaSyTot = deltaSy-alpha*(p-pOld);
+        sigmaB = sigmaB + deltaSyTot;
+        bsAverage = -int1d(Th, labelB)(sigmaB*(x <= Lfrac))/Lfrac;
+        sB[3] = bsAverage;
+        sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
+                + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
+                + sB[4] * (x > layerBorder[4]);
+
+
+        pEff = pf - alpha*PrFunc - sBFunc;
+        pNet = pf - sigmaMin - sBFunc;
+        pNetAverage = int1d(Thw, labelFrac)(pNet*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
+
+        real absErrorL2 = 1.0;
+        real normL2 = 1.0;
+        real relErrorL2 = 1.0;
+        int count = 0;
+        int iOmega = 0;
+        [uIter, vIter] = [0.0, 0.0];
+
+        while (relErrorL2 > tol && count < maxIter) {
+            matrix Ap = PenaltyBilinearForm(Wh, Wh);
+            matrix Aw = Ae + Ap;
+            real[int] bw = RhsLinearForm(0, Wh);
+            set(Aw, solver=sparsesolver);
+            u[] = Aw^-1*bw;
+            
+            normL2 = sqrt(int2d(Thw)(v^2));
+            absErrorL2 = sqrt(int2d(Thw)((v - vIter)^2));
+            relErrorL2 = absErrorL2 / normL2;
+
+            uIter[] = omega[iOmega]*u[] + (1.0 - omega[iOmega])*uIter[];
+            ++ count;
+
+            if (count == maxIter && relErrorL2 > tol && iOmega + 1 < nOmega) {
+                count = 0;
+                iOmega += 1;  
+            }
+
+            cout << "   Elasticity   (" << count << ")    "<< omega[iOmega] << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
+        }
+
+        wAverage = int1d(Thw, labelFrac)(v*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
+
+        cout << "On frac pressure = " << FracPressure << endl;
+        cout << "BsAverage = " << bsAverage << endl;
+        cout << "wAverage = " << wAverage << endl;
+    
+    }
+
+    Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
+
+    if(wAverage^3 > 3*kf){
+        nonlinearFlag = 1;
+    }
+    else{
+        nonlinearFlag = 0;
+    }
+
+    wOld = wAverage;
+    pOld = p;
+
+    savevtk("./Results/ElastResultsNewMesh" + i + ".vtu", Thw, u, v, Syy, -sigmaMin, pNet, pEff, dataname = "u v Syy Smin pNet pEff", order=order);
+    savevtk("./Results/FiltrationResultsNewMesh" + i + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
+
+    t = t + dt;
+    i = i + 1;
+    cout << " CPU time = " << clock()-cpu << endl;
+}

@@ -62,7 +62,7 @@ verbosity = 0;
 
 /* Domain definition and mesh generation */
 real frcS = 20.0;
-int NNN = 50;
+int NNN = 60;
 
 real xMin = layerBorder[0];
 real xFracL = layerBorder[2] - frcS;
@@ -110,11 +110,12 @@ border GammaDomain( t = 0.0, 1.0; i ) {
 }
 
 mesh Th = buildmesh(GammaDomain(nGamma));
-// cout << "Old mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
-// plot(Th, wait=1, dim=2, cmm="Old mesh");
+cout << "Old mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
+plot(Th, wait=1, dim=2, cmm="Old mesh");
 Th = splitmesh(Th, 1 + 5*(y <= 50)*(x <= xFracR && x >= xFracL));
-// cout << "New mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
-// plot(Th, wait=1, dim=2, cmm="New mesh");
+cout << "New mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
+plot(Th, wait=1, dim=2, cmm="New mesh");
+exit(0);
 
 /* Fespace definition */
 fespace Vh(Th, [P2, P2]);

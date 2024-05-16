@@ -5,13 +5,12 @@ include "gnuplotInterface.edp"
 
 include "Parameters.edp"
 
-int NN = 50;
+int NN = 10;
 
-int labelF = 1; /* fracture */
-int labelB = 2; /* Bottom */
-int labelR = 3; /* Right hand side of domain */
-int labelT = 4; /* Top of domain */
-int labelL = 5; /* Left hand side of domain */
+int labelB = 1; /* Bottom */
+int labelR = 2; /* Right hand side of domain */
+int labelT = 3; /* Top of domain */
+int labelL = 4; /* Left hand side of domain */
 
 real[int] xP = [0.0, L, L, 0.0]; /* enumeration of xcoords */
 real[int] yP = [0.0, 0.0, H, H]; /* enumeration of ycoords */
@@ -31,54 +30,64 @@ border GammaDomain(t = 0.0, 1.0; i)    /*i - number of boundary(label), t - para
 }
 
 mesh Th = buildmesh(GammaDomain(nGamma));
-cout << "Old mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
-plot(Th, wait=1, cmm="Old mesh");
-// exit(0);
-Th = splitmesh(Th, 1 + 2*((x <= 1000.0)*(y <= 500.0)));
-cout << "New mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
-plot(Th, wait=1, cmm="New mesh");
+// cout << "Old mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
+// plot(Th, wait=1, cmm="Old mesh");
+
+real hMesh = H;
+real lMesh = L;
+for(int i = 0; i < 7; i++){
+    hMesh /= 2.0;
+    lMesh /= 1.2;
+    Th = splitmesh(Th, 1 + 1*((x <= lMesh)*(y <= hMesh)));
+    plot(Th, wait=1, cmm="New mesh"+i);
+    // cout << "New mesh" << i << "    Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
+}
 
 fespace Vh(Th, P2);
 Vh p, phi;
 Vh pOld;
 Vh RHSQ;
+// Vh f = 1.0;
 pOld = p0;
 
-macro grad(p)[dx(p), dy(p)] // EOM
+// int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+// savevtk("./FiltrationNewMesh.vtu", Th, f, dataname = "f", order=order);
 
-real[int] xdelta = [0.0]; // coord x of point source
-real[int] ydelta = [0.0]; // coord y of point source
-real[int] cdelta=[dt*Q];  // value of point source
-matrix D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
-RHSQ[] = D*cdelta;
+// macro grad(p)[dx(p), dy(p)] // EOM
 
-varf FiltrationBilinearForm(p, phi) = 
-    int2d(Th)(Seps*p*phi) 
-    + int2d(Th)((dt*kr/mu)*grad(p)'*grad(phi)) 
-    + int1d(Th, labelB)((dt*kf/mu)*dx(p)*dx(phi)*(x <= Lfrac))
-    + on(labelT, p = p0)
-    + on(labelR, p = p0);
+// real[int] xdelta = [0.0]; // coord x of point source
+// real[int] ydelta = [0.0]; // coord y of point source
+// real[int] cdelta=[dt*Q];  // value of point source
+// matrix D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
+// RHSQ[] = D*cdelta;
 
-varf FiltrationLinearForm(p, phi) = 
-    int2d(Th)(Seps*pOld*phi)
-    + RHSQ[]
-    + on(labelT, p = p0)
-    + on(labelR, p = p0);
+// varf FiltrationBilinearForm(p, phi) = 
+//     int2d(Th)(Seps*p*phi) 
+//     + int2d(Th)((dt*kr/mu)*grad(p)'*grad(phi)) 
+//     + int1d(Th, labelB)((dt*kf/mu)*dx(p)*dx(phi)*(x <= Lfrac))
+//     + on(labelT, p = p0)
+//     + on(labelR, p = p0);
 
-int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-int i = 0;
-real t = 0.0;
-// real deltaH = 5.0;
-while(t < tMax){
-    cout << "t = " << t << endl;
-    // Lfrac += deltaH;
-    matrix A = FiltrationBilinearForm(Vh, Vh);
-    set(A, solver = sparsesolver);
-    real[int] b = FiltrationLinearForm(0, Vh);
-    p[] = A^-1*b;
-    pOld = p;
-    t = t + dt;
-    i = i + 1;
-    // plot(Th, p, wait=1, fill=1, dim=2);
-    savevtk("./Results/FracGrowthNewMesh" + i + ".vtu", Th, p, dataname = "p", order=order);
-    }
+// varf FiltrationLinearForm(p, phi) = 
+//     int2d(Th)(Seps*pOld*phi)
+//     + RHSQ[]
+//     + on(labelT, p = p0)
+//     + on(labelR, p = p0);
+
+// int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+// int i = 0;
+// real t = 0.0;
+// // real deltaH = 5.0;
+// while(t < tMax){
+//     cout << "t = " << t << endl;
+//     // Lfrac += deltaH;
+//     matrix A = FiltrationBilinearForm(Vh, Vh);
+//     set(A, solver = sparsesolver);
+//     real[int] b = FiltrationLinearForm(0, Vh);
+//     p[] = A^-1*b;
+//     pOld = p;
+//     t = t + dt;
+//     i = i + 1;
+//     // plot(Th, p, wait=1, fill=1, dim=2);
+//     savevtk("./Results/FracGrowthNewMesh" + i + ".vtu", Th, p, dataname = "p", order=order);
+//     }
