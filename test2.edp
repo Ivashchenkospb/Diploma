@@ -1,21 +1,21 @@
 real alpha = 0.7;
 real rho0 = 2300.0;  
 real g = 9.80665;
-real pf = 32.0*1e6; /* Pa, Fracture pressure */
+real pf = 31.4*1e6; /* Pa, Fracture pressure */
 
-
-real[int] layerBorder = [   /* [m], Layer borders depth            */
-    1500.0,
+real[int] layerBorder = [ /* [m], Layer borders depth */
+    2350.0,
     2650.0,
     2690.0,
     2700.0,
     2750.0,
-    4000.0
+    3050.0
 ];
 
 int nLayer = layerBorder.n - 1; /* Number of layers */
+real HProdLayer = layerBorder[4] - layerBorder[3];
 
-real[int] E = 1.0e9*[       /* [Pa], Young's modulus               */
+real[int] Ew = 1.0e9*[ /* [Pa], Young's modulus */
     24.00,
     24.00,
     24.00,
@@ -23,7 +23,7 @@ real[int] E = 1.0e9*[       /* [Pa], Young's modulus               */
     24.00
 ];
 
-real[int] nu = [            /* [], Poisson's ratio                 */
+real[int] nuw = [ /* [], Poisson's ratio */
     0.31,
     0.21,
     0.31,
@@ -31,7 +31,7 @@ real[int] nu = [            /* [], Poisson's ratio                 */
     0.31
 ];
 
-real[int] pr = 1.0e6 * [
+real[int] pr = 1.0e6 * [ /* [Pa], Reservoir pressure */
     26.4,
     26.4,
     26.4,
@@ -39,108 +39,97 @@ real[int] pr = 1.0e6 * [
     26.4
 ];
 
-real[int] sB = 1.0e6*[
+real[int] sB = 1.0e6*[ /* [Pa], Backstress in each layer */
     0.0,
     0.0,
     0.0,
-    0.0,
+    1.0,
     0.0
 ];
 
-real[int] rho = [
-    2300.0,
-    2300.0,
-    2300.0,
-    2300.0,
-    2300.0
-];
-
-real penalty = 1.0e4*E[0];
-int maxIter = 10;                   /* Maximum number of nonlinear iterations */
+real penalty = 1.0e7*Ew[0];
+int maxIter = 40;                   /* Maximum number of nonlinear iterations */
 real tol = 1.0e-6;                  /* Tolerance for iteration stop criterion */
 verbosity = 0;
 
 /* Domain definition and mesh generation */
 real frcS = 20.0;
-int NNN = 60;
+int NNN = 10;
 
 real xMin = layerBorder[0];
 real xFracL = layerBorder[2] - frcS;
-real xFracR1 = layerBorder[3];
-real xFracR2 = layerBorder[4];
 real xFracR = layerBorder[4] + frcS;
 real xMax = layerBorder[5];
 
-real yMax = (xMin + xMax) / 2.0 / 2.0;
+real yMax = (xMin + xMax) / 2.0 / 2.0 / 2.0;
 real Hsize = xMax - xMin;
+real Hfrac = xFracR - xFracL;
+cout << yMax << endl;
+cout << Hsize << endl;
 
-real[int] xP = [xMin, xFracL, xFracR1, xFracR2, xFracR, xMax, xMax, xMin];
-real[int] yP = [0, 0, 0, 0, 0, 0, yMax, yMax];
+real[int] xPw = [xMin, xFracL, xFracR, xMax, xMax, xMin];
+real[int] yPw = [0, 0, 0, 0, yMax, yMax];
 
-// int[int] nGamma = [(xFracL - xMin)/Hsize, 
-//                    20*(xFracR1 - xFracL)/Hsize,
-//                    20*(xFracR2 - xFracR1)/Hsize, 
-//                    20*(xFracR - xFracR2)/Hsize,
-//                    (xMax - xFracR)/Hsize,
-//                    yMax/Hsize, 1, yMax/Hsize] * NNN;
-
-int[int] nGamma = [(xFracL - xMin)/Hsize, 
-                   5*(xFracR1 - xFracL)/Hsize,
-                   5*(xFracR2 - xFracR1)/Hsize, 
-                   5*(xFracR - xFracR2)/Hsize,
+int[int] nGammaW = [(xFracL - xMin)/Hsize, 
+                   (xFracR - xFracL)/Hsize,
                    (xMax - xFracR)/Hsize,
                    yMax/Hsize, 1, yMax/Hsize] * NNN;
 
 int labelBottom = 1;
-int labelFrac1 = 2;
-int labelFrac2 = 3;
-int labelFrac3 = 4;
-int labelRight = 5;
-int labelTop = 6;
-int labelLeft = 7;
+int labelFrac = 2;
+int labelRight = 3;
+int labelTop = 4;
+int labelLeft = 5;
+int[int] labelGammaW = [labelBottom, labelFrac, labelBottom,
+                        labelRight, labelTop, labelLeft];
 
-int[int] labelGamma = [labelBottom, labelFrac1, labelFrac2, labelFrac3, labelBottom,
-                       labelRight, labelTop, labelLeft];
-
-border GammaDomain( t = 0.0, 1.0; i ) {
-    int iNext = (i + 1)%nGamma.n;
-    x = xP[i]*(1.0 - t) + xP[iNext]*t;
-    y = yP[i]*(1.0 - t) + yP[iNext]*t;
-    label = labelGamma[i];
+border GammaDomainW( t = 0.0, 1.0; i ) {
+    int iNext = (i + 1)%nGammaW.n;
+    x = xPw[i]*(1.0 - t) + xPw[iNext]*t;
+    y = yPw[i]*(1.0 - t) + yPw[iNext]*t;
+    label = labelGammaW[i];
 }
+// cout << nGammaW << endl;
 
-mesh Th = buildmesh(GammaDomain(nGamma));
-cout << "Old mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
-plot(Th, wait=1, dim=2, cmm="Old mesh");
-Th = splitmesh(Th, 1 + 5*(y <= 50)*(x <= xFracR && x >= xFracL));
-cout << "New mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
-plot(Th, wait=1, dim=2, cmm="New mesh");
-exit(0);
+mesh Thw = buildmesh(GammaDomainW(nGammaW));
+// plot(Thw, wait=1, dim=2, cmm="Old mesh");
+// cout << "Old mesh   " << "Nt = " << Thw.nt << "  Nv = " << Thw.nv << endl;
+real hMeshElast = yMax;
+real lMeshElast = Hfrac;
+for(int i = 0; i < 7; i++){
+    hMeshElast /= 2.0;
+    Thw = splitmesh(Thw, 1 + 1*(y <= hMeshElast)*(x <= (xFracR + lMeshElast) && x >= (xFracL - lMeshElast)));
+    lMeshElast /= 2.0;
+    // plot(Thw, wait=1, dim=2, cmm="Old mesh");
+    // cout << "New mesh" << i << "   Nt = " << Thw.nt << "  Nv = " << Thw.nv << endl;
+    } 
 
 /* Fespace definition */
-fespace Vh(Th, [P2, P2]);
 
-fespace Xh(Th, P1);
-Xh f = 1.0;
-load "iovtk"
-int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-savevtk("./ElasticityMesh.vtu", Th, f, dataname = "f", order=order);
+// Xh f = 1.0;
+// load "iovtk"
+// int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+// savevtk("./ElasticityMesh.vtu", Th, f, dataname = "f", order=order);
 // exit(0);
 
-Vh [u, v];
-Vh [uIter, vIter];
-Vh [phi, psi];
-Xh Sxx, Syy, Txy;
+fespace Wh(Thw, [P2, P2]);
+fespace Xh(Thw, P1);
+
+Wh [u, v];
+Wh [uIter, vIter];
+Wh [phiw, psiw];
+// Xh Sxx;
+Xh Syy;
 
 Xh PrFunc = pr[0] * (x <= layerBorder[1]) + pr[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
          + pr[2] * (x > layerBorder[2] && x <= layerBorder[3])+ pr[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
          + pr[4] * (x > layerBorder[4]);
-Xh EFunc = E[0] * (x <= layerBorder[1]) + E[1] * (x > layerBorder[1] && x <= layerBorder[2])
-           + E[2] * (x > layerBorder[2] && x <= layerBorder[3]) + E[3] * (x > layerBorder[3] && x <= layerBorder[4])
-           + E[4] * (x > layerBorder[4]);
-Xh nuFunc = nu[0] * (x <= layerBorder[1]) + nu[1] * (x > layerBorder[1] && x <= layerBorder[2])
-            + nu[2] * (x > layerBorder[2] && x <= layerBorder[3]) + nu[3] * (x > layerBorder[3] && x <= layerBorder[4])
-            + nu[4] * (x > layerBorder[4]);
+Xh EFunc = Ew[0] * (x <= layerBorder[1]) + Ew[1] * (x > layerBorder[1] && x <= layerBorder[2])
+           + Ew[2] * (x > layerBorder[2] && x <= layerBorder[3]) + Ew[3] * (x > layerBorder[3] && x <= layerBorder[4])
+           + Ew[4] * (x > layerBorder[4]);
+Xh nuFunc = nuw[0] * (x <= layerBorder[1]) + nuw[1] * (x > layerBorder[1] && x <= layerBorder[2])
+            + nuw[2] * (x > layerBorder[2] && x <= layerBorder[3]) + nuw[3] * (x > layerBorder[3] && x <= layerBorder[4])
+            + nuw[4] * (x > layerBorder[4]);
 Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
             + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
             + sB[4] * (x > layerBorder[4]);
@@ -148,14 +137,18 @@ Xh lambdaFunc = nuFunc*EFunc / ((1 + nuFunc) * (1 - 2*nuFunc));
 Xh muFunc = EFunc / (2 + 2*nuFunc);
 Xh sigmaVeff = rho0*g*x - alpha*PrFunc;
 Xh sigmaMin = (nuFunc / (1 - nuFunc)) * (sigmaVeff) + alpha*PrFunc;
+Xh Pfrac = pf;
 
+cout << int1d(Thw, labelFrac)((sigmaMin - alpha*PrFunc)*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]) << endl;
+cout << "Pnet " << int1d(Thw, labelFrac)((Pfrac - sigmaMin - sBFunc)*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]) << endl;
+cout << "PEff " << int1d(Thw, labelFrac)((Pfrac - alpha*PrFunc - sBFunc)*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]) << endl;
 /* Macros for differential operators, strain and stress tensors */
 real sqrt2 = sqrt(2.0);
 macro div(u, v) (dx(u) + dy(v)) // EOM
 macro epsilon(u, v) [dx(u), dy(v), (dy(u) + dx(v))/sqrt2] // EOM
 
 varf ElasticityBilinearForm([u, v], [phiw, psiw]) = 
-    int2d(Th)(
+    int2d(Thw)(
         lambdaFunc*div(u,v)*div(phiw, psiw) + 2.0*muFunc*epsilon(u, v)'*epsilon(phiw, psiw)
     )
     + on(labelBottom, v = 0.0)
@@ -163,13 +156,7 @@ varf ElasticityBilinearForm([u, v], [phiw, psiw]) =
     + on(labelTop, v = 0.0);
 
 varf PenaltyBilinearForm([u, v], [phiw, psiw]) =
-    int1d(Th, labelFrac2)(
-        penalty*v*(vIter < 0.0)*psiw
-    )
-    + int1d(Th, labelFrac1)(
-        penalty*v*(vIter < 0.0)*psiw
-    )
-    + int1d(Th, labelFrac3)(
+    int1d(Thw, labelFrac)(
         penalty*v*(vIter < 0.0)*psiw
     )
     + on(labelBottom, v = 0.0)
@@ -177,19 +164,14 @@ varf PenaltyBilinearForm([u, v], [phiw, psiw]) =
     + on(labelTop, v = 0.0);
 
 varf RhsLinearForm([u, v], [phiw, psiw]) = 
-    int2d(Th)(
+    int2d(Thw)(
         rho0*g*phiw
     )
-    + int1d(Th, labelFrac2)(
-        (pf - alpha*PrFunc)*psiw
+    + int1d(Thw, labelFrac)(
+        (Pfrac - alpha*PrFunc - sBFunc)*psiw*(x <= layerBorder[4] && x >= layerBorder[3]) 
+        + (1 - (x <= layerBorder[4] && x >= layerBorder[3]))*(Pfrac - alpha*PrFunc - sBFunc)*(vIter > 0.0)*psiw
     )
-    + int1d(Th, labelFrac1)(
-        (pf - alpha*PrFunc)*(vIter > 0.0)*psiw
-    )
-    + int1d(Th, labelFrac3)(
-        (pf - alpha*PrFunc)*(vIter > 0.0)*psiw
-    )
-    + int1d(Th, labelLeft)(
+    + int1d(Thw, labelLeft)(
         sigmaVeff*phiw
     )
     + on(labelBottom, v = 0.0)
@@ -197,7 +179,7 @@ varf RhsLinearForm([u, v], [phiw, psiw]) =
     + on(labelTop, v = 0.0);
 
 load "MUMPS_seq"
-matrix Ae = ElasticityBilinearForm(Vh, Vh);
+matrix Ae = ElasticityBilinearForm(Wh, Wh);
 
 real[int] omega = [1.0, 0.75, 0.5, 0.3];
 int iOmega = 0;
@@ -209,16 +191,16 @@ real absErrorL2 = 1.0;
 real normL2 = 1.0;
 real relErrorL2 = 1.0;
 int count = 0;
-real[int] b = RhsLinearForm(0, Vh);
+real[int] b = RhsLinearForm(0, Wh);
 
 while (relErrorL2 > tol && count < maxIter) {
-    matrix Ap = PenaltyBilinearForm(Vh, Vh);
+    matrix Ap = PenaltyBilinearForm(Wh, Wh);
     matrix A = Ae + Ap;
     set(A, solver=sparsesolver);
     u[] = A^-1*b;
     
-    normL2 = sqrt(int2d(Th)(v^2));
-    absErrorL2 = sqrt(int2d(Th)((v - vIter)^2));
+    normL2 = sqrt(int2d(Thw)(v^2));
+    absErrorL2 = sqrt(int2d(Thw)((v - vIter)^2));
     relErrorL2 = absErrorL2 / normL2;
 
     uIter[] = omega[iOmega]*u[] + (1.0 - omega[iOmega])*uIter[];
@@ -243,14 +225,14 @@ while (relErrorL2 > tol && count < maxIter) {
 // plot(Th2, [u, v], dim=2, value=1, nbiso=30, fill=1, wait=1, cmm="Displacement vector");
 // plot(Th, [u2, v2], dim=2, value=1, wait=1);
 
-Sxx = lambdaFunc*div(u, v) + 2.0*muFunc*dx(u);
+// Sxx = lambdaFunc*div(u, v) + 2.0*muFunc*dx(u);
 Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
 
 // plot(Th, Sxx, dim=2, value=1, nbiso=30, fill=1, wait=1, cmm="Sxx");
 // plot(Th, Syy, dim=2, value=1, nbiso=30, fill=1, wait=1, cmm="Syy");
 
 load "iovtk"
-// int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-savevtk("./ElasticityResultsNewMesh1.vtu", Th, u, v, Syy, -sigmaMin,
+int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+savevtk("./ElasticityResultsNewMesh.vtu", Thw, u, v, Syy, -sigmaMin,
         dataname = "u v Sxx Syy Smin", order=order);
 
