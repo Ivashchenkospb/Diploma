@@ -1,14 +1,14 @@
 if(nonlinearFlag){
-        wIter = 1.4*1e-3;
-        sigmaBIter = bsAverage;
+        wIter = 0.0;
+        sigmaBIter = 0.0;
         real absErrorL2Filtration = 1.0;
         real normL2Filtration = 1.0;
         real relErrorL2Filtration = 1.0;
         int countFiltration = 0;
         int iOmegaFiltration = 0;
 
-        cout << endl;
-        cout << "Starting nonlinear iterations" << endl;
+        // cout << endl;
+        // cout << "Starting nonlinear iterations" << endl;
         while (relErrorL2Filtration > 1.0e-6 && countFiltration < maxIter) {
 
             matrix A = FiltrationBilinearForm(Vh, Vh);
@@ -66,31 +66,29 @@ if(nonlinearFlag){
                     iOmega += 1;  
                 }
 
-                cout << "       (" << count << ")    "<< omega[iOmega] << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
+                // cout << "       (" << count << ")    "<< omega[iOmega] << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << "    Elasticity" << endl;
             }
 
             wAverage = int1d(Thw, labelFrac)(v*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
             Vh Backstress = bsAverage;
             Vh halfWidth = wAverage;
-
-            cout << "On frac pressure = " << FracPressure << endl;
-            cout << "BsAverage = " << bsAverage << endl;
-            cout << "wAverage = " << wAverage << endl;
+            countFiltration += 1;
 
             normL2Filtration = sqrt(int2d(Th)(Backstress^2 + halfWidth^2));
             absErrorL2Filtration = sqrt(int2d(Th)((Backstress - sigmaBIter)^2 + (halfWidth - wIter)^2));
             relErrorL2Filtration = absErrorL2Filtration / normL2Filtration;
-            cout << "   (" << countFiltration << ")" << "    rel_error_L2_Filtration = " << relErrorL2Filtration << endl;
+            // cout << "   (" << countFiltration << ")" << "    rel_error_L2_Filtration = " << relErrorL2Filtration << endl;
+            // cout << "   On frac pressure = " << FracPressure << endl;
+            // cout << "   BsAverage = " << bsAverage << endl;
+            // cout << "   wAverage = " << wAverage << endl;
 
             wIter = omega[iOmegaFiltration]*halfWidth + (1.0 - omega[iOmegaFiltration])*wIter;
             sigmaBIter = omega[iOmegaFiltration]*Backstress+ (1.0 - omega[iOmegaFiltration])*sigmaBIter;
-            countFiltration += 1;
 
             if (countFiltration == maxIter && relErrorL2Filtration > tol && iOmegaFiltration + 1 < nOmega) {
                     countFiltration = 0;
                     iOmegaFiltration += 1;  
                 }
-
         }
     }
     else{
@@ -147,13 +145,13 @@ if(nonlinearFlag){
                 iOmega += 1;  
             }
 
-            cout << "   Elasticity   (" << count << ")    "<< omega[iOmega] << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
+            // cout << "       Elasticity   (" << count << ")    "<< omega[iOmega] << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
         }
 
         wAverage = int1d(Thw, labelFrac)(v*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
 
-        cout << "On frac pressure = " << FracPressure << endl;
-        cout << "BsAverage = " << bsAverage << endl;
-        cout << "wAverage = " << wAverage << endl;
+        // cout << "   On frac pressure = " << FracPressure << endl;
+        // cout << "   BsAverage = " << bsAverage << endl;
+        // cout << "   wAverage = " << wAverage << endl;
     
     }

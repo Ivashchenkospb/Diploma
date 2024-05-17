@@ -13,16 +13,16 @@ real mu = 1.0*1e-3; /* [Pa*s], Reservoir and fracture fluid viscosity */
 real fiPorosity = 0.2; /* [], Porosity */
 real E = 24.0*1e9; /* [Pa], Young modulus */
 real nu = 0.21; /* [], Poisson coef */
-real alpha = 0.7; /* [], Biot coef */
+real alpha = 1.0; /* [], Biot coef */
 real lambda=E*nu/(1.0+nu)/(1.0-nu); /* [Pa], Lame coef */
 real G=E/2.0/(1.0+nu); /* [Pa], Lame coef */
 real PP=lambda+2.0*G;
 real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
-real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
-// real Q = 4*5.8*1e-6;
+// real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
+real Q = 4*5.8*1e-6; /* [m^2/s] Injection per unit height (height = 50 m) */
 real p0 = 26.4*1e6; /* [Pa], Outer pressure */
-real dt = 500.0; /* [s], Timestep */
-real tMax = 100000.0; /* [s], Maximal time */
+real dt = 3600.0; /* [s], Timestep */
+real tMax = 86400.0 * 10; /* [s], Maximal time */
 real KIc = 1.73*1e6; /* [Pa*m^0.5] Fracture toughness */
 
 /*------------------------------------------------------------------------------------------*/
@@ -30,7 +30,8 @@ real KIc = 1.73*1e6; /* [Pa*m^0.5] Fracture toughness */
 /* Domain geometry and parameters *\
 \* for fracture width definition  */
 
-real rho0 = 2300.0;  
+real rho0 = 2300.0;
+real rhow = 1000.0; 
 real g = 9.80665;
 
 real[int] layerBorder = [ /* [m], Layer borders depth */

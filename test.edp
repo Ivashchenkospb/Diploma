@@ -3,7 +3,26 @@ load "pipe"
 load "MUMPS_seq"
 include "gnuplotInterface.edp"
 
-include "Parameters.edp"
+real L = 1500.0; /* [m] */
+real H = 1000.0; /* [m] */
+real Lfrac = 200.0; /* [m] */
+real kr = 1.0*1e-14; /* [m^2], Reservoir permeability */
+real kf = kr*1e5; /* [m^2], Fracture permeability */
+real mu = 1.0*1e-3; /* [Pa*s], Reservoir and fracture fluid viscosity */
+real fiPorosity = 0.2; /* [], Porosity */
+real E = 24.0*1e9; /* [Pa], Young modulus */
+real nu = 0.21; /* [], Poisson coef */
+real alpha = 0.7; /* [], Biot coef */
+real lambda=E*nu/(1.0+nu)/(1.0-nu); /* [Pa], Lame coef */
+real G=E/2.0/(1.0+nu); /* [Pa], Lame coef */
+real PP=lambda+2.0*G;
+real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
+// real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
+real Q = 10*5.8*1e-6; /* [m^2/s] Injection per unit height (height = 50 m) */
+real p0 = 26.4*1e6; /* [Pa], Outer pressure */
+real dt = 3600.0; /* [s], Timestep */
+real tMax = 86400.0 * 10; /* [s], Maximal time */
+real KIc = 1.73*1e6; /* [Pa*m^0.5] Fracture toughness */
 
 int NN = 10;
 
@@ -20,74 +39,70 @@ int[int] nGamma = [1, H/L, 1, H/L] * NN; /* number of mesh parts on fracture, on
 
 int[int] labelGamma = [labelB, labelR, labelT, labelL];
 
-border GammaDomain(t = 0.0, 1.0; i)    /*i - number of boundary(label), t - parameter*/
+border GammaDomain(t = 0.0, 1.0; i)
 {
-    int iNext = (i+1) % nGamma.n;   /* .n - the length of the nGamma massive*/
+    int iNext = (i+1) % nGamma.n;
 
     x = xP[i]*(1-t) + xP[iNext]*t;
     y = yP[i]*(1-t) + yP[iNext]*t;
-    label = labelGamma[i]; /* the flag of the boundary */
+    label = labelGamma[i];
 }
 
 mesh Th = buildmesh(GammaDomain(nGamma));
-// cout << "Old mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
-// plot(Th, wait=1, cmm="Old mesh");
 
-real hMesh = H;
-real lMesh = L;
+real hMeshFiltr = H;
+real lMeshFiltr = L;
 for(int i = 0; i < 7; i++){
-    hMesh /= 2.0;
-    lMesh /= 1.2;
-    Th = splitmesh(Th, 1 + 1*((x <= lMesh)*(y <= hMesh)));
-    plot(Th, wait=1, cmm="New mesh"+i);
-    // cout << "New mesh" << i << "    Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
+    hMeshFiltr /= 2.0;
+    lMeshFiltr /= 1.2;
+    Th = splitmesh(Th, 1 + 1*((x <= lMeshFiltr)*(y <= hMeshFiltr)));
 }
 
 fespace Vh(Th, P2);
 Vh p, phi;
 Vh pOld;
 Vh RHSQ;
-// Vh f = 1.0;
 pOld = p0;
 
-// int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-// savevtk("./FiltrationNewMesh.vtu", Th, f, dataname = "f", order=order);
+macro grad(p)[dx(p), dy(p)] // EOM
 
-// macro grad(p)[dx(p), dy(p)] // EOM
+real[int] xdelta = [0.0]; // coord x of point source
+real[int] ydelta = [0.0]; // coord y of point source
+real[int] cdelta=[dt*Q];  // value of point source
+matrix D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
+RHSQ[] = D*cdelta;
 
-// real[int] xdelta = [0.0]; // coord x of point source
-// real[int] ydelta = [0.0]; // coord y of point source
-// real[int] cdelta=[dt*Q];  // value of point source
-// matrix D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
-// RHSQ[] = D*cdelta;
+varf FiltrationBilinearForm(p, phi) = 
+    int2d(Th)(Seps*p*phi) 
+    + int2d(Th)((dt*kr/mu)*grad(p)'*grad(phi)) 
+    + int1d(Th, labelB)((dt*kf/mu)*dx(p)*dx(phi)*(x <= Lfrac))
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
 
-// varf FiltrationBilinearForm(p, phi) = 
-//     int2d(Th)(Seps*p*phi) 
-//     + int2d(Th)((dt*kr/mu)*grad(p)'*grad(phi)) 
-//     + int1d(Th, labelB)((dt*kf/mu)*dx(p)*dx(phi)*(x <= Lfrac))
-//     + on(labelT, p = p0)
-//     + on(labelR, p = p0);
+varf FiltrationLinearForm(p, phi) = 
+    int2d(Th)(Seps*pOld*phi)
+    + RHSQ[]
+    + on(labelT, p = p0)
+    + on(labelR, p = p0);
 
-// varf FiltrationLinearForm(p, phi) = 
-//     int2d(Th)(Seps*pOld*phi)
-//     + RHSQ[]
-//     + on(labelT, p = p0)
-//     + on(labelR, p = p0);
-
-// int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-// int i = 0;
-// real t = 0.0;
-// // real deltaH = 5.0;
-// while(t < tMax){
-//     cout << "t = " << t << endl;
-//     // Lfrac += deltaH;
-//     matrix A = FiltrationBilinearForm(Vh, Vh);
-//     set(A, solver = sparsesolver);
-//     real[int] b = FiltrationLinearForm(0, Vh);
-//     p[] = A^-1*b;
-//     pOld = p;
-//     t = t + dt;
-//     i = i + 1;
-//     // plot(Th, p, wait=1, fill=1, dim=2);
-//     savevtk("./Results/FracGrowthNewMesh" + i + ".vtu", Th, p, dataname = "p", order=order);
-//     }
+int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
+int i = 0;
+real t = 0.0;
+real deltaH = 5.0;
+real fracPressure = 0.0;
+while(t < tMax){
+    cout << "t = " << t << endl;
+    if(fracPressure > 3.1*1e7){
+        Lfrac += deltaH;
+    }
+    matrix A = FiltrationBilinearForm(Vh, Vh);
+    set(A, solver = sparsesolver);
+    real[int] b = FiltrationLinearForm(0, Vh);
+    p[] = A^-1*b;
+    fracPressure = int1d(Th, labelB)(p*(x <= Lfrac))/Lfrac;
+    pOld = p;
+    t = t + dt;
+    i = i + 1;
+    // plot(Th, p, wait=1, fill=1, dim=2);
+    savevtk("./Results/FracGrowthNewMesh" + i + ".vtu", Th, p, dataname = "p", order=order);
+    }
