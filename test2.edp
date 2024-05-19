@@ -2,7 +2,7 @@ real alpha = 1.0;
 real rho0 = 2300.0;
 real rhow = 1000.0;
 real g = 9.80665;
-real pf = (36.0 + 0.387+0.08)*1e6; /* Pa, Fracture pressure */
+real pf = (29.0)*1e6; /* Pa, Fracture pressure */
 
 real[int] layerBorder = [ /* [m], Layer borders depth */
     2350.0,
@@ -65,8 +65,8 @@ real xMax = layerBorder[5];
 real yMax = (xMin + xMax) / 2.0 / 2.0 / 2.0;
 real Hsize = xMax - xMin;
 real Hfrac = xFracR - xFracL;
-cout << yMax << endl;
-cout << Hsize << endl;
+// cout << yMax << endl;
+// cout << Hsize << endl;
 
 real[int] xPw = [xMin, xFracL, xFracR, xMax, xMax, xMin];
 real[int] yPw = [0, 0, 0, 0, yMax, yMax];
