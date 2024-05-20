@@ -18,10 +18,12 @@ int labelL = 4; /* Left hand side of domain */
 real[int] xP = [0.0, L, L, 0.0]; /* enumeration of xcoords */
 real[int] yP = [0.0, 0.0, H, H]; /* enumeration of ycoords */
 
-int[int] nGamma = [1, H/L, 1, H/L] * NN;
+int[int] nGamma = [1, H/L, 1, H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+// int[int] nGamma = [10*1, H/L, L/L, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+
 int[int] labelGamma = [labelB, labelR, labelT, labelL];
 
-border GammaDomain(t = 0.0, 1.0; i) 
+border GammaDomain(t = 0.0, 1.0; i)
 {
     int iNext = (i+1) % nGamma.n;
 
@@ -32,19 +34,20 @@ border GammaDomain(t = 0.0, 1.0; i)
 
 mesh Th = buildmesh(GammaDomain(nGamma));
 
-real hMeshFiltr = H;
-real lMeshFiltr = L;
-for(int i = 0; i < 7; i++){
+real hMeshFiltr = H/1.5;
+real lMeshFiltr = L/1.5;
+for(int i = 0; i < 8; i++){
     hMeshFiltr /= 2.0;
     lMeshFiltr /= 1.2;
     Th = splitmesh(Th, 1 + 1*((x <= lMeshFiltr)*(y <= hMeshFiltr)));
+    // cout << "New mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
 }
 
 /*   Domain definition and mesh generation  *\
 \*      for fracture width definition       */
 
-real frcS = 20.0;
-int NNN = 10;
+real frcS = 10.0;
+int NNN = 20;
 
 real xMin = layerBorder[0];
 real xFracL = layerBorder[2] - frcS;
@@ -81,11 +84,12 @@ border GammaDomainW( t = 0.0, 1.0; i ) {
 mesh Thw = buildmesh(GammaDomainW(nGammaW));
 real hMeshElast = yMax;
 real lMeshElast = Hfrac;
-for(int i = 0; i < 7; i++){
+for(int i = 0; i < 6; i++){
     hMeshElast /= 2.0;
     Thw = splitmesh(Thw, 1 + 1*(y <= hMeshElast)*(x <= (xFracR + lMeshElast) && x >= (xFracL - lMeshElast)));
     lMeshElast /= 2.0;
-}
+    // cout << "New mesh   " << "Nt = " << Thw.nt << "  Nv = " << Thw.nv << endl;
+    } 
 
 /*  Fespace definition for   *\
 \* filtration and backstress */
@@ -251,7 +255,7 @@ while(t < tMax){
 }
 
 dt = 3000.0;
-Q = 20*1e-5;
+Q = 11*1e-5;
 cdelta=[dt*Q];
 D = interpolate(Vh, xdelta, ydelta);
 RHSQ[] = D*cdelta;
@@ -336,11 +340,11 @@ while(t < tMax){
     savevtk("./Results/ElasticityConstantFrac" + i + ".vtu", Thw, u, v, Syy, SyyFull, -sigmaMin, pNet, pEff, dataname = "u v Syy SyyFull Smin pNet pEff", order=order);
     savevtk("./Results/Filtration" + j + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
 
-    int nPoints = 30;
+    int nPoints = 20;
     real[int] xx(nPoints);
     real[int] vv(nPoints);
     for(int i=0; i<nPoints; i++){
-        xx[i] = 2690.0 + 10.0/(nPoints - 1)*i;
+        xx[i] = layerBorder[2] + 5.0/(nPoints - 1)*i;
         vv[i] = v(xx[i], 0.0);
     }
     if(vv.min > 1e-4){
@@ -348,14 +352,14 @@ while(t < tMax){
         exit(0);
     }
 
-    if(pNetAverage >= 0.0){
+    if(pNetAverage >= pNetCrit - 30000){
         dt = 500.0;
         cdelta=[dt*Q];  // value of point source
         D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
         RHSQ[] = D*cdelta;
     }
 
-    if(pNetAverage > pNetCrit - 15000){
+    if(pNetAverage > pNetCrit - 30000){
         Lfrac += 1.0;
     }
 

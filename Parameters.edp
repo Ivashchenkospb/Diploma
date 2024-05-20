@@ -4,27 +4,28 @@
 |   for filtration and backstress  |
 \*          definition            */
 
-real L = 1500.0; /* [m] */
-real H = 1000.0; /* [m] */
+real L = 3000.0; /* [m] */
+real H = 2000.0; /* [m] */
 real Lfrac = 200.0; /* [m] */
 real kr = 1.0*1e-14; /* [m^2], Reservoir permeability */
 real kf = kr*1e5; /* [m^2], Fracture permeability */
 real mu = 1.0*1e-3; /* [Pa*s], Reservoir and fracture fluid viscosity */
 real fiPorosity = 0.2; /* [], Porosity */
-real E = 24.0*1e9; /* [Pa], Young modulus */
+real E = 20.0*1e9; /* [Pa], Young modulus */
 real nu = 0.21; /* [], Poisson coef */
 real alpha = 1.0; /* [], Biot coef */
-real lambda=E*nu/(1.0+nu)/(1.0-nu); /* [Pa], Lame coef */
+real lambda=E*nu/(1.0+nu)/(1.0-2*nu); /* [Pa], Lame coef */
 real G=E/2.0/(1.0+nu); /* [Pa], Lame coef */
 real PP=lambda+2.0*G;
 // real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
-real Q = -5.0*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
+real Q = -2.0*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
 // real Q = - 0.5*5.8*1e-6; /* [m^2/s] Injection per unit height (height = 50 m) */
 real p0 = 26.4*1e6; /* [Pa], Outer pressure */
 real dt = 3600.0*12; /* [s], Timestep */
-real tMax = 86400.0*180; /* [s], Maximal time */
+real tMax = 86400.0*90; /* [s], Maximal time */
 real KIc = 1.73*1e6; /* [Pa*m^0.5] Fracture toughness */
 real Ct = 1.0e-10; /* [Pa^-1], Compressibility */
+// cout << 1/(lambda + 2*G/3) << endl;
 
 // cout << Seps << endl;
 
@@ -40,38 +41,38 @@ real g = 9.80665;
 real[int] layerBorder = [ /* [m], Layer borders depth */
     2350.0,
     2650.0,
-    2690.0,
-    2700.0,
-    2750.0,
-    3050.0
+    2660.0,
+    2665.0,
+    2675.0,
+    2950.0
 ];
 
 int nLayer = layerBorder.n - 1; /* Number of layers */
 real HProdLayer = layerBorder[4] - layerBorder[3];
 
 real[int] Ew = 1.0e9*[ /* [Pa], Young's modulus */
-    24.00,
-    24.00,
-    24.00,
-    24.00,
-    24.00
+    20.00,
+    20.00,
+    20.00,
+    20.00,
+    20.00
 ];
 
 real[int] nuw = [ /* [], Poisson's ratio */
-    0.26,
+    0.31,
     0.21,
-    0.26,
+    0.31,
     0.21,
-    0.26
+    0.31
 ];
 
-real[int] pr = 1.0e6 * [ /* [Pa], Reservoir pressure */
-    26.4,
-    26.4,
-    26.4,
-    26.4,
-    26.4
-];
+// real[int] pr = 1.0e6 * [ /* [Pa], Reservoir pressure */
+//     26.4,
+//     26.4,
+//     26.4,
+//     26.4,
+//     26.4
+// ];
 
 real[int] sB = 1.0e6*[ /* [Pa], Backstress in each layer */
     0.0,
