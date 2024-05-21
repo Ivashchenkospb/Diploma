@@ -246,7 +246,7 @@ while(t < tMax){
     deltaSyTot = deltaSy-alpha*(p-pOld);
     sigmaB = sigmaB + deltaSyTot;
 
-    savevtk("./Results/Filtration" + j + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
+    savevtk("./Results/FiltrationProd" + j + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
 
     pOld = p;
     t = t + dt;
@@ -338,7 +338,7 @@ while(t < tMax){
     Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
     SyyFull = Syy - alpha*PrFunc;
     savevtk("./Results/ElasticityConstantFrac" + i + ".vtu", Thw, u, v, Syy, SyyFull, -sigmaMin, pNet, pEff, dataname = "u v Syy SyyFull Smin pNet pEff", order=order);
-    savevtk("./Results/Filtration" + i + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
+    savevtk("./Results/FiltrationInj" + i + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
 
     int nPoints = 20;
     real[int] xx(nPoints);
