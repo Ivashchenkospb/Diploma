@@ -206,6 +206,6 @@ cout << "PEff = " << int1d(Thw, labelFrac)((Pfrac - alpha*PrFunc - sBFunc)*(x <=
 
 // load "iovtk"
 // int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-savevtk("./ElasticityAVPD.vtu", Thw, u, v, Syy, -sigmaMin, PrFunc, pEff, 
+savevtk("./ElasticityAVPD1.vtu", Thw, u, v, Syy, -sigmaMin, PrFunc, pEff, 
         dataname = "u v Syy Smin Pr pEff", order=order);
 
