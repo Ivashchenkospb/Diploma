@@ -1,0 +1,29 @@
+real L = 3000.0; /* [m] */
+real H = 2000.0;
+
+int NN = 50;
+
+int labelB = 1; /* Bottom */
+int labelR = 2; /* Right hand side of domain */
+int labelT = 3; /* Top of domain */
+int labelL = 4; /* Left hand side of domain */
+
+real[int] xP = [0.0, L, L, 0.0]; /* enumeration of xcoords */
+real[int] yP = [0.0, 0.0, H, H]; /* enumeration of ycoords */
+
+int[int] nGamma = [1, H/L, 1, H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+// int[int] nGamma = [10*1, H/L, L/L, 10*H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+
+int[int] labelGamma = [labelB, labelR, labelT, labelL];
+
+border GammaDomain(t = 0.0, 1.0; i)
+{
+    int iNext = (i+1) % nGamma.n;
+
+    x = xP[i]*(1-t) + xP[iNext]*t;
+    y = yP[i]*(1-t) + yP[iNext]*t;
+    label = labelGamma[i];
+}
+
+mesh Th = buildmesh(GammaDomain(nGamma));
+plot(Th);
