@@ -18,10 +18,10 @@ real G=E/2.0/(1.0+nu); /* [Pa], Lame coef */
 real PP=lambda+2.0*G;
 // real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
 // real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
-real Q = -2.0*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
+real Q = 11.0*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
 real p0 = 26.4*1e6; /* [Pa], Outer pressure */
-real dt = 3600.0*12; /* [s], Timestep */
-real tMax = 86400.0 * 180; /* [s], Maximal time */
+real dt = 3600.0; /* [s], Timestep */
+real tMax = 86400.0; /* [s], Maximal time */
 real KIc = 1.73*1e6; /* [Pa*m^0.5] Fracture toughness */
 real Ct = 1.0e-10; /* [Pa^-1], Compressibility */
 
@@ -50,8 +50,6 @@ border GammaDomain(t = 0.0, 1.0; i)
 }
 
 mesh Th = buildmesh(GammaDomain(nGamma));
-plot(Th);
-exit(0);
 
 real hMeshFiltr = H/1.5;
 real lMeshFiltr = L/1.5;
@@ -61,12 +59,12 @@ for(int i = 0; i < 8; i++){
     Th = splitmesh(Th, 1 + 1*((x <= lMeshFiltr)*(y <= hMeshFiltr)));
     cout << "New mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
 }
-plot(Th);
+
 
 fespace Vh(Th, P2);
 Vh f = 1.0;
 int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-savevtk(".FiltrationMesh.vtu", Th, f, dataname = "f", order=order);
+// savevtk(".FiltrationMesh.vtu", Th, f, dataname = "f", order=order);
 Vh p, phi;
 Vh pOld;
 Vh RHSQ;
@@ -117,27 +115,34 @@ real fracPressure = 0.0;
 
 matrix BB = BackstressBilinearForm(Vh, Vh);
 
-while(t < tMax){
-    cout << "t = " << t << endl;
-    matrix A = FiltrationBilinearForm(Vh, Vh);
-    set(A, solver = sparsesolver);
-    real[int] b = FiltrationLinearForm(0, Vh);
-    p[] = A^-1*b;
-    fracPressure = int1d(Th, labelB)(p*(x <= Lfrac))/Lfrac;
+{
+    ofstream f1save("Results/fracpressur1.txt");
+    ofstream f2save("Results/fracpressure2.txt");
+    while(t < tMax){
+        cout << "t = " << t << endl;
+        matrix A = FiltrationBilinearForm(Vh, Vh);
+        set(A, solver = sparsesolver);
+        real[int] b = FiltrationLinearForm(0, Vh);
+        p[] = A^-1*b;
+        fracPressure = int1d(Th, labelB)(p*(x <= Lfrac))/Lfrac;
 
-    RHS = alpha*(p-pOld)/PP;
-    real[int] bB = BackstressLinearForm(0, Vh);
-    psi[] = BB^-1*bB;
-    psix = dx(psi);
-    psiy = dy(psi);
-    psixx = dx(psix);
-    psiyy = dy(psiy);
-    deltaSy = lambda*(psixx+psiyy)+2*G*psiyy;
-    deltaSyTot = deltaSy-alpha*(p-pOld);
-    sigmaB = sigmaB + deltaSyTot;
+        f1save << t << "\t" << fracPressure << "\n";
+        f2save << t << "\t" << fracPressure << "\n";
 
-    pOld = p;
-    t = t + dt;
-    i = i + 1;
-    savevtk("./Results/FracGrowthNewMesh" + i + ".vtu", Th, p, sigmaB, dataname = "p Backstress", order=order);
-    }
+        RHS = alpha*(p-pOld)/PP;
+        real[int] bB = BackstressLinearForm(0, Vh);
+        psi[] = BB^-1*bB;
+        psix = dx(psi);
+        psiy = dy(psi);
+        psixx = dx(psix);
+        psiyy = dy(psiy);
+        deltaSy = lambda*(psixx+psiyy)+2*G*psiyy;
+        deltaSyTot = deltaSy-alpha*(p-pOld);
+        sigmaB = sigmaB + deltaSyTot;
+
+        pOld = p;
+        t = t + dt;
+        i = i + 1;
+        // savevtk("./Results/FracGrowthNewMesh" + i + ".vtu", Th, p, sigmaB, dataname = "p Backstress", order=order);
+        }
+}
