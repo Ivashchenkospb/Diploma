@@ -10,15 +10,15 @@ include "Parameters.edp"
 
 int NN = 10;
 
-int labelB = 1; /* Bottom */
-int labelR = 2; /* Right hand side of domain */
-int labelT = 3; /* Top of domain */
-int labelL = 4; /* Left hand side of domain */
+int labelB = 1;
+int labelR = 2;
+int labelT = 3;
+int labelL = 4;
 
-real[int] xP = [0.0, L, L, 0.0]; /* enumeration of xcoords */
-real[int] yP = [0.0, 0.0, H, H]; /* enumeration of ycoords */
+real[int] xP = [0.0, L, L, 0.0];
+real[int] yP = [0.0, 0.0, H, H];
 
-int[int] nGamma = [1, H/L, 1, H/L] * NN; /* number of mesh parts on fracture, on the rest of bottom, etc. */
+int[int] nGamma = [1, H/L, 1, H/L] * NN;
 
 int[int] labelGamma = [labelB, labelR, labelT, labelL];
 
@@ -39,7 +39,6 @@ for(int i = 0; i < 8; i++){
     hMeshFiltr /= 2.0;
     lMeshFiltr /= 1.2;
     Th = splitmesh(Th, 1 + 1*((x <= lMeshFiltr)*(y <= hMeshFiltr)));
-    // cout << "New mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
 }
 
 /*   Domain definition and mesh generation  *\
@@ -87,12 +86,7 @@ for(int i = 0; i < 6; i++){
     hMeshElast /= 2.0;
     Thw = splitmesh(Thw, 1 + 1*(y <= hMeshElast)*(x <= (xFracR + lMeshElast) && x >= (xFracL - lMeshElast)));
     lMeshElast /= 2.0;
-    // cout << "New mesh   " << "Nt = " << Thw.nt << "  Nv = " << Thw.nv << endl;
     } 
-
-cout << "New mesh   " << "Nt = " << Thw.nt << "  Nv = " << Thw.nv << endl;
-plot(Thw);
-exit(0);
 
 /*  Fespace definition for   *\
 \* filtration and backstress */
@@ -145,10 +139,10 @@ macro grad(p)[dx(p), dy(p)] // EOM
 /*  Weak problem formulation for   *\
 \*    filtration and backstress    */
 
-real[int] xdelta = [0.0]; // coord x of point source
-real[int] ydelta = [0.0]; // coord y of point source
-real[int] cdelta=[dt*Q];  // value of point source
-matrix D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
+real[int] xdelta = [0.0];
+real[int] ydelta = [0.0];
+real[int] cdelta=[dt*Q];
+matrix D = interpolate(Vh, xdelta, ydelta);
 RHSQ[] = D*cdelta;
 
 varf FiltrationBilinearForm(p, phi) = 
@@ -231,9 +225,9 @@ int j = 0;
 real t = 0;
 
 {
-    ofstream FracPresResults("Results/fracpressure.txt");
-    ofstream FracBsResults("Results/fracbackstress.txt");
-    ofstream FracResults("Results/fracresults.txt");
+    // ofstream FracPresResults("Results/fracpressure.txt");
+    // ofstream FracBsResults("Results/fracbackstress.txt");
+    // ofstream FracResults("Results/fracresults.txt");
 
     while(t < tMax){
         cout << "Time = " << t << " s" << endl;
@@ -242,7 +236,7 @@ real t = 0;
         set(A, solver = sparsesolver);
         real[int] b = FiltrationLinearForm(0, Vh);
         p[] = A^-1*b;
-        FracPressure = int1d(Th, labelB)(p*(x <= Lfrac))/Lfrac;
+        // FracPressure = int1d(Th, labelB)(p*(x <= Lfrac))/Lfrac;
 
         RHS = alpha*(p-pOld)/PP;
         real[int] bB = BackstressLinearForm(0, Vh);
@@ -256,10 +250,10 @@ real t = 0;
         sigmaB = sigmaB + deltaSyTot;
         bsAverage = -int1d(Th, labelB)(sigmaB*(x <= Lfrac))/Lfrac;
 
-        FracPresResults << t << "\t" << FracPressure << "\n";
-        FracBsResults << t << "\t" << bsAverage << "\n";
+        // FracPresResults << t << "\t" << FracPressure << "\n";
+        // FracBsResults << t << "\t" << bsAverage << "\n";
 
-        // savevtk("./Results/FiltrationProd" + j + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
+        savevtk("./Results/FiltrationProd" + j + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
 
         pOld = p;
         t = t + dt;
@@ -348,14 +342,14 @@ real t = 0;
         cout << "wAverage = " << wAverage << endl;
         cout << "Iteration - " << i << endl;
 
-        FracPresResults << t << "\t" << FracPressure << "\n";
-        FracBsResults << t << "\t" << bsAverage << "\n";
-        FracResults << t << "\t" << Lfrac << "\t" << pNetAverage << "\t" << wAverage << "\n";
+        // FracPresResults << t << "\t" << FracPressure << "\n";
+        // FracBsResults << t << "\t" << bsAverage << "\n";
+        // FracResults << t << "\t" << Lfrac << "\t" << pNetAverage << "\t" << wAverage << "\n";
 
         Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
         SyyFull = Syy - alpha*PrFunc;
-        // savevtk("./Results/ElasticityConstantFrac" + i + ".vtu", Thw, u, v, Syy, SyyFull, -sigmaMin, pNet, pEff, dataname = "u v Syy SyyFull Smin pNet pEff", order=order);
-        // savevtk("./Results/FiltrationInj" + i + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
+        savevtk("./Results/ElasticityConstantFrac" + i + ".vtu", Thw, u, v, Syy, SyyFull, -sigmaMin, pNet, pEff, dataname = "u v Syy SyyFull Smin pNet pEff", order=order);
+        savevtk("./Results/FiltrationInj" + i + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
 
         // int nPoints = 20;
         // real[int] xx(nPoints);
