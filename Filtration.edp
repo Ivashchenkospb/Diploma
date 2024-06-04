@@ -19,7 +19,7 @@ real PP=lambda+2.0*G;
 // real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
 // real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
 real Q = 11.0*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
-real p0 = 26.4*1e6; /* [Pa], Outer pressure */
+real p0 = 32.4*1e6; /* [Pa], Outer pressure */
 real dt = 3600.0; /* [s], Timestep */
 real tMax = 86400.0; /* [s], Maximal time */
 real KIc = 1.73*1e6; /* [Pa*m^0.5] Fracture toughness */
@@ -59,7 +59,6 @@ for(int i = 0; i < 8; i++){
     Th = splitmesh(Th, 1 + 1*((x <= lMeshFiltr)*(y <= hMeshFiltr)));
     cout << "New mesh   " << "Nt = " << Th.nt << "  Nv = " << Th.nv << endl;
 }
-
 
 fespace Vh(Th, P2);
 Vh f = 1.0;
@@ -116,8 +115,8 @@ real fracPressure = 0.0;
 matrix BB = BackstressBilinearForm(Vh, Vh);
 
 {
-    ofstream f1save("Results/fracpressur1.txt");
-    ofstream f2save("Results/fracpressure2.txt");
+    // ofstream f1save("Results/fracpressure1.txt");
+    // ofstream f2save("Results/fracpressure2.txt");
     while(t < tMax){
         cout << "t = " << t << endl;
         matrix A = FiltrationBilinearForm(Vh, Vh);
@@ -126,8 +125,8 @@ matrix BB = BackstressBilinearForm(Vh, Vh);
         p[] = A^-1*b;
         fracPressure = int1d(Th, labelB)(p*(x <= Lfrac))/Lfrac;
 
-        f1save << t << "\t" << fracPressure << "\n";
-        f2save << t << "\t" << fracPressure << "\n";
+        // f1save << t << "\t" << fracPressure << "\n";
+        // f2save << t << "\t" << fracPressure << "\n";
 
         RHS = alpha*(p-pOld)/PP;
         real[int] bB = BackstressLinearForm(0, Vh);
@@ -143,6 +142,6 @@ matrix BB = BackstressBilinearForm(Vh, Vh);
         pOld = p;
         t = t + dt;
         i = i + 1;
-        // savevtk("./Results/FracGrowthNewMesh" + i + ".vtu", Th, p, sigmaB, dataname = "p Backstress", order=order);
+        savevtk("./Results/FracGrowthNewMesh" + i + ".vtu", Th, p, sigmaB, dataname = "p Backstress", order=order);
         }
 }

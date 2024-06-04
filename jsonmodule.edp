@@ -1,0 +1,92 @@
+func bool BeginJSONFile(string jsonPath) {
+    {
+        ofstream file(jsonPath);
+        file << "{" << endl;
+    }
+    return true;
+}
+
+func bool EndJSONFile(string jsonPath) {
+    {
+        ofstream file(jsonPath, append);
+        file << "}" << endl;
+    }
+    return true;
+}
+
+func bool WriteIntToJSON(string jsonPath, string fieldName,
+        int integer, bool isLastField) {
+    {
+        ofstream file(jsonPath, append);
+        file.scientific;
+        file << "\t" << "\"" << fieldName << "\": " << integer;
+        if (isLastField) {
+            file << endl;
+        } else {
+            file << "," << endl;
+        }
+    }
+    return true;
+}
+
+func bool WriteRealToJSON(string jsonPath, string fieldName,
+        real xx, bool isLastField) {
+    {
+        ofstream file(jsonPath, append);
+        file.scientific;
+        file << "\t" << "\"" << fieldName << "\": " << xx;
+        if (isLastField) {
+            file << endl;
+        } else {
+            file << "," << endl;
+        }
+    }
+    return true;
+}
+
+func bool WriteArray1DRealToJSON(string jsonPath, string fieldName,
+        real[int]& arr, bool isLastField) {
+    {
+        ofstream file(jsonPath, append);
+        file.scientific;
+        file << "\t" << "\"" << fieldName << "\": " << "[\n"
+             << "\t\t";
+        for (int i = 0; i < arr.n - 1; ++i) {
+            file << arr[i] << ", ";
+            if ((i + 1) % 5 == 0) {
+                file << endl << "\t\t";
+            }
+        }
+        file << arr[arr.n - 1] << "\n";
+        file << "\t]";
+        if (isLastField) {
+            file << endl;
+        } else {
+            file << "," << endl;
+        }
+    }
+    return true;
+}
+
+func bool WriteArray1DIntToJSON(string jsonPath, string fieldName,
+        int[int]& arr, bool isLastField) {
+    {
+        ofstream file(jsonPath, append);
+        file << "\t" << "\"" << fieldName << "\": " << "[\n"
+             << "\t\t";
+        for (int i = 0; i < arr.n - 1; ++i) {
+            file << arr[i] << ", ";
+            if ((i + 1) % 20 == 0) {
+                file << endl << "\t\t";
+            }
+        }
+        file << arr[arr.n - 1] << "\n";
+        file << "\t]";
+        if (isLastField) {
+            file << endl;
+        } else {
+            file << "," << endl;
+        }
+    }
+    return true;
+}

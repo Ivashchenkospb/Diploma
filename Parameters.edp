@@ -47,6 +47,14 @@ real[int] layerBorder = [ /* [m], Layer borders depth */
     2950.0
 ];
 
+int[int] ProdLayers = [
+    0,
+    1,
+    0,
+    1,
+    0
+];
+
 int nLayer = layerBorder.n - 1; /* Number of layers */
 real HProdLayer = layerBorder[4] - layerBorder[3];
 

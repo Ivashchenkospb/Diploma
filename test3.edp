@@ -1,4 +1,3 @@
-int i = 10;
-{ofstream MyFile("DFile.txt");
-    MyFile << i << "\n";
-}
+include "jsonmodule.edp"
+string path = "./result.json";
+BeginJSONFile(path);

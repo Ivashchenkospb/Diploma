@@ -2,7 +2,8 @@ real alpha = 1.0;
 real rho0 = 2300.0;
 real rhow = 1000.0;
 real g = 9.80665;
-real pf = (40.0)*1e6; /* Pa, Fracture pressure */
+real pf = (41.1)*1e6; /* Pa, Fracture pressure */
+real p0 = 30.0*1e6;
 
 real[int] layerBorder = [ /* [m], Layer borders depth */
     2350.0,
@@ -11,6 +12,14 @@ real[int] layerBorder = [ /* [m], Layer borders depth */
     2665.0,
     2675.0,
     2950.0
+];
+
+int[int] ProdLayers = [
+    0,
+    1,
+    0,
+    1,
+    0
 ];
 
 int nLayer = layerBorder.n - 1; /* Number of layers */
@@ -34,12 +43,14 @@ real[int] nuw = [ /* [], Poisson's ratio */
 
 real[int] sB = 1.0e6*[ /* [Pa], Backstress in each layer */
     0.0,
+    2.5,
     0.0,
-    0.0,
-    3.0,
+    2.5,
     0.0
 ];
 
+string path = "./result.json";
+int nPoints = 500;
 real penalty = 1.0e7*Ew[0];
 int maxIter = 40;                   /* Maximum number of nonlinear iterations */
 real tol = 1.0e-6;                  /* Tolerance for iteration stop criterion */
@@ -50,7 +61,7 @@ real frcS = 10.0;
 int NNN = 20;
 
 real xMin = layerBorder[0];
-real xFracL = layerBorder[2] - frcS;
+real xFracL = layerBorder[1] - frcS;
 real xFracR = layerBorder[4] + frcS;
 real xMax = layerBorder[5];
 
@@ -88,26 +99,18 @@ for(int i = 0; i < 6; i++){
     hMeshElast /= 2.0;
     Thw = splitmesh(Thw, 1 + 1*(y <= hMeshElast)*(x <= (xFracR + lMeshElast) && x >= (xFracL - lMeshElast)));
     lMeshElast /= 2.0;
-    // cout << "New mesh   " << "Nt = " << Thw.nt << "  Nv = " << Thw.nv << endl;
-    } 
-// plot(Thw);
-/* Fespace definition */
-
+}
 
 load "iovtk"
 int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 
-
 fespace Wh(Thw, [P2, P2]);
 fespace Xh(Thw, P1);
-// Xh f = 1.0;
-// savevtk("./MeshElast.vtu", Thw, f, dataname="f", order=order);
-
 
 Wh [u, v];
 Wh [uIter, vIter];
 Wh [phiw, psiw];
-Xh Syy;
+Xh Syy, SyyFull;
 
 Xh EFunc = Ew[0] * (x <= layerBorder[1]) + Ew[1] * (x > layerBorder[1] && x <= layerBorder[2])
            + Ew[2] * (x > layerBorder[2] && x <= layerBorder[3]) + Ew[3] * (x > layerBorder[3] && x <= layerBorder[4])
@@ -120,8 +123,8 @@ Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= 
             + sB[4] * (x > layerBorder[4]);
 Xh lambdaFunc = nuFunc*EFunc / ((1 + nuFunc) * (1 - 2*nuFunc));
 Xh muFunc = EFunc / (2 + 2*nuFunc);
-Xh PrFunc = rhow*g*x;
-// Xh sigmaVeff = rho0*g*x - alpha*PrFunc;
+Xh PrFunc = rhow*g*x + (p0 - rhow*g*x)*(x > layerBorder[1] && x <= layerBorder[2]) + (p0 - rhow*g*x)*(x > layerBorder[3] && x <= layerBorder[4]);
+// Xh PrFunc = rhow*g*x;
 Xh sigmaMin = (nuFunc / (1 - nuFunc)) * (rho0*g*x - alpha*PrFunc) + alpha*PrFunc;
 Xh Pfrac = pf;
 
@@ -152,7 +155,7 @@ varf RhsLinearForm([u, v], [phiw, psiw]) =
     )
     + int1d(Thw, labelFrac)(
         (Pfrac - alpha*PrFunc - sBFunc)*psiw*(x <= layerBorder[4] && x >= layerBorder[3]) 
-        + (1 - (x <= layerBorder[4] && x >= layerBorder[3]))*(Pfrac - alpha*PrFunc - sBFunc)*(vIter > 0.0)*psiw
+        + (1 - (x <= layerBorder[4] && x >= layerBorder[3]))*(Pfrac - alpha*PrFunc - sBFunc)*(vIter > 1e-10)*psiw
     )
     + int1d(Thw, labelLeft)(
         (rho0 - rhow)*g*x*phiw
@@ -174,9 +177,9 @@ real absErrorL2 = 1.0;
 real normL2 = 1.0;
 real relErrorL2 = 1.0;
 int count = 0;
-real[int] b = RhsLinearForm(0, Wh);
 
 while (relErrorL2 > tol && count < maxIter) {
+    real[int] b = RhsLinearForm(0, Wh);
     matrix Ap = PenaltyBilinearForm(Wh, Wh);
     matrix A = Ae + Ap;
     set(A, solver=sparsesolver);
@@ -199,27 +202,38 @@ while (relErrorL2 > tol && count < maxIter) {
     cout << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
 }
 
-// plot(Th, u, dim=2, value=1, nbiso=30, fill=1, wait=1, cmm="u");
-// plot(Th, v, dim=2, value=1, nbiso=30, fill=1, wait=1, cmm="v");
-// real coef = 200.0;
-// mesh Th2 = movemesh(Th, [x + coef*u, y + coef*v]);
-// plot(Th2, wait=1);
-// Vh [u2, v2] = [0, v];
-// plot(Th2, [u, v], dim=2, value=1, nbiso=30, fill=1, wait=1, cmm="Displacement vector");
-// plot(Th, [u2, v2], dim=2, value=1, wait=1);
-
-// Sxx = lambdaFunc*div(u, v) + 2.0*muFunc*dx(u);
 Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
+SyyFull = Syy - alpha*PrFunc;
 
-cout << "SigmaMinEff = " << int1d(Thw, labelFrac)((sigmaMin - alpha*PrFunc)*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]) << endl;
-cout << "PnetTeory = " << int1d(Thw, labelFrac)((Pfrac - sigmaMin - sBFunc)*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]) << endl;
-cout << "PEff = " << int1d(Thw, labelFrac)((Pfrac - alpha*PrFunc - sBFunc)*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]) << endl;
+// cout << "SigmaMinEff = " << int1d(Thw, labelFrac)((sigmaMin - alpha*PrFunc)*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]) << endl;
+// cout << "PnetTeory = " << int1d(Thw, labelFrac)((Pfrac - sigmaMin - sBFunc)*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]) << endl;
+// cout << "PEff = " << int1d(Thw, labelFrac)((Pfrac - alpha*PrFunc - sBFunc)*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]) << endl;
 
-// plot(Th, Sxx, dim=2, value=1, nbiso=30, fill=1, wait=1, cmm="Sxx");
-// plot(Th, Syy, dim=2, value=1, nbiso=30, fill=1, wait=1, cmm="Syy");
+savevtk("./ElasticityResultsWithG.vtu", Thw, u, v, Syy, SyyFull, -sigmaMin, PrFunc, dataname = "u v Syy SyyFull Smin Pr", order=order);
 
-// load "iovtk"
-// int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
-savevtk("./ElasticityResultsWithG.vtu", Thw, u, v, Syy, -sigmaMin, PrFunc, 
-        dataname = "u v Syy Smin Pr", order=order);
+{
+    include "jsonmodule.edp"
+    BeginJSONFile(path);
 
+    real[int] vv(nPoints);
+    real[int] ss(nPoints);
+    real[int] ssb(nPoints);
+    real[int] xx(nPoints);
+    real hx = Hfrac / real(nPoints - 1);
+
+    for (int i = 0; i < nPoints; ++i) {
+            xx[i] = xFracL + hx*real(i);
+            vv[i] = 1.0e3*v(xx[i], 0.0);
+            ss[i] = -1.0e-6*sigmaMin(xx[i], 0.0);
+            ssb[i] = ss[i] - 1.0e-6*sBFunc(xx[i], 0.0); 
+        }
+
+    WriteArray1DRealToJSON(path, "Borders", layerBorder, false);
+    WriteArray1DIntToJSON(path, "ProdLayers", ProdLayers, false);
+    WriteArray1DRealToJSON(path, "depth", xx, false);
+    WriteArray1DRealToJSON(path, "halfwidth", vv, false);
+    WriteArray1DRealToJSON(path, "sMin", ss, false);
+    WriteArray1DRealToJSON(path, "sMinBack", ssb, true);
+
+    EndJSONFile(path);
+}
