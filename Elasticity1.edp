@@ -2,7 +2,7 @@ real alpha = 1.0;
 real rho0 = 2300.0;
 real rhow = 1000.0;
 real g = 9.80665;
-real pf = (45.0)*1e6; /* Pa, Fracture pressure */
+real pf = (41.3)*1e6; /* Pa, Fracture pressure */
 real p0 = 31.8*1e6;
 
 real[int] layerBorder = [ /* [m], Layer borders depth */
@@ -65,7 +65,7 @@ real xFracL = layerBorder[1] - frcS;
 real xFracR = layerBorder[4] + frcS;
 real xMax = layerBorder[5];
 
-real yMax = (xMin + xMax) / 2.0 / 2.0 / 2.0;
+real yMax = (xMin + xMax) / 2.0 / 2.0 / 2.0 / 2.0;
 real Hsize = xMax - xMin;
 real Hfrac = xFracR - xFracL;
 
@@ -100,6 +100,10 @@ for(int i = 0; i < 6; i++){
     Thw = splitmesh(Thw, 1 + 1*(y <= hMeshElast)*(x <= (xFracR + lMeshElast) && x >= (xFracL - lMeshElast)));
     lMeshElast /= 2.0;
 }
+
+// cout << Thw.nv << " " << Thw.nt << endl;
+// plot(Thw);
+// exit(0);
 
 load "iovtk"
 int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
@@ -142,32 +146,20 @@ varf ElasticityBilinearForm([u, v], [phiw, psiw]) =
     int2d(Thw)(
         lambdaFunc*div(u,v)*div(phiw, psiw) + 2.0*muFunc*epsilon(u, v)'*epsilon(phiw, psiw)
     )
-    + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0)
-    + on(labelTop, v = 0.0);
+    + on(labelBottom, v = 0.0);
 
 varf PenaltyBilinearForm([u, v], [phiw, psiw]) =
     int1d(Thw, labelFrac)(
         penalty*v*(vIter < 0.0)*psiw
     )
-    + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0)
-    + on(labelTop, v = 0.0);
+    + on(labelBottom, v = 0.0);
 
 varf RhsLinearForm([u, v], [phiw, psiw]) = 
-    int2d(Thw)(
-        (rho0-rhow)*g*phiw
+    int1d(Thw, labelFrac)(
+        (Pfrac - sigmaMin - sBFunc)*psiw*(x <= layerBorder[4] && x >= layerBorder[3]) 
+        + (1 - (x <= layerBorder[4] && x >= layerBorder[3]))*(Pfrac - sigmaMin - sBFunc)*(vIter > 1.0e-5)*psiw
     )
-    + int1d(Thw, labelFrac)(
-        (Pfrac - alpha*PrFunc - sBFunc)*psiw*(x <= layerBorder[4] && x >= layerBorder[3]) 
-        + (1 - (x <= layerBorder[4] && x >= layerBorder[3]))*(Pfrac - alpha*PrFunc - sBFunc)*(vIter > 1e-10)*psiw
-    )
-    + int1d(Thw, labelLeft)(
-        (rho0 - rhow)*g*x*phiw
-    )
-    + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0)
-    + on(labelTop, v = 0.0);
+    + on(labelBottom, v = 0.0);
 
 load "MUMPS_seq"
 matrix Ae = ElasticityBilinearForm(Wh, Wh);

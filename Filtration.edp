@@ -5,7 +5,7 @@ include "gnuplotInterface.edp"
 
 real L = 3000.0; /* [m] */
 real H = 2000.0; /* [m] */
-real Lfrac = 200.0; /* [m] */
+real Lfrac = 400.0; /* [m] */
 real kr = 1.0*1e-14; /* [m^2], Reservoir permeability */
 real kf = kr*1e5; /* [m^2], Fracture permeability */
 real mu = 1.0*1e-3; /* [Pa*s], Reservoir and fracture fluid viscosity */
@@ -17,10 +17,10 @@ real lambda=E*nu/(1.0+nu)/(1.0-2*nu); /* [Pa], Lame coef */
 real G=E/2.0/(1.0+nu); /* [Pa], Lame coef */
 real PP=lambda+2.0*G;
 // real Seps = ((alpha-fiPorosity)*(1-alpha))/(lambda+2*G/3); /* [Pa^-1], Storativity */
-// real Q = 14*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
-real Q = 11.0*1e-5; /* [m^2/s] Injection per unit height (height = 50 m) */
-real p0 = 32.4*1e6; /* [Pa], Outer pressure */
-real dt = 3600.0; /* [s], Timestep */
+// real Q = 14*1e-5; /* [m^2/s] Injection per unit height */
+real Q = 14.4*1e-5; /* [m^2/s] Injection per unit height */
+real p0 = 30.0*1e6; /* [Pa], Outer pressure */
+real dt = 500.0; /* [s], Timestep */
 real tMax = 86400.0; /* [s], Maximal time */
 real KIc = 1.73*1e6; /* [Pa*m^0.5] Fracture toughness */
 real Ct = 1.0e-10; /* [Pa^-1], Compressibility */
@@ -107,7 +107,6 @@ varf BackstressLinearForm(psi, khi)=
     + on(labelR, psi=0)
     + on(labelT, psi=0);
 
-// int[int] order = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1];
 int i = 0;
 real t = 0.0;
 real fracPressure = 0.0;
@@ -115,8 +114,6 @@ real fracPressure = 0.0;
 matrix BB = BackstressBilinearForm(Vh, Vh);
 
 {
-    // ofstream f1save("Results/fracpressure1.txt");
-    // ofstream f2save("Results/fracpressure2.txt");
     while(t < tMax){
         cout << "t = " << t << endl;
         matrix A = FiltrationBilinearForm(Vh, Vh);
@@ -124,9 +121,6 @@ matrix BB = BackstressBilinearForm(Vh, Vh);
         real[int] b = FiltrationLinearForm(0, Vh);
         p[] = A^-1*b;
         fracPressure = int1d(Th, labelB)(p*(x <= Lfrac))/Lfrac;
-
-        // f1save << t << "\t" << fracPressure << "\n";
-        // f2save << t << "\t" << fracPressure << "\n";
 
         RHS = alpha*(p-pOld)/PP;
         real[int] bB = BackstressLinearForm(0, Vh);

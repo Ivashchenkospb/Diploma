@@ -2,6 +2,7 @@ load "iovtk"
 load "pipe"
 load "MUMPS_seq"
 include "gnuplotInterface.edp"
+include "jsonmodule.edp"
 
 /*------------------------------------------------------------------------------------------*/
 
@@ -12,22 +13,22 @@ include "gnuplotInterface.edp"
 real L = 3000.0; /* [m] */
 real H = 2000.0; /* [m] */
 real Lfrac = 200.0; /* [m] */
-real kr = 1.0*1e-14; /* [m^2], Reservoir permeability */
-real kf = kr*1e5; /* [m^2], Fracture permeability */
-real mu = 1.0*1e-3; /* [Pa*s], Reservoir and fracture fluid viscosity */
+real kr = 1.0e-14; /* [m^2], Reservoir permeability */
+real kf = kr*1.0e5; /* [m^2], Fracture permeability */
+real mu = 1.0e-3; /* [Pa*s], Reservoir and fracture fluid viscosity */
 real fiPorosity = 0.2; /* [], Porosity */
-real E = 20.0*1e9; /* [Pa], Young modulus */
+real E = 20.0*1.0e9; /* [Pa], Young modulus */
 real nu = 0.21; /* [], Poisson coef */
 real alpha = 1.0; /* [], Biot coef */
-real lambda=E*nu/(1.0+nu)/(1.0-2*nu); /* [Pa], Lame coef */
+real lambda=E*nu/(1.0+nu)/(1.0-2.0*nu); /* [Pa], Lame coef */
 real G=E/2.0/(1.0+nu); /* [Pa], Lame coef */
 real PP=lambda+2.0*G;
-real Q = 14.4*1e-5; /* [m^2/s] Injection per unit height (height = 10 m) */
+real Q = 14.4*1.0e-5; /* [m^2/s] Injection per unit height (height = 10 m) */
 // real Q = - 0.5*5.8*1e-6; /* [m^2/s] Injection per unit height (height = 10 m) */
-real p0 = 30.0*1e6; /* [Pa], Outer pressure */
-real dt = 10.0; /* [s], Timestep */
-real tMax = 10000.0; /* [s], Maximal time */
-real KIc = 1.73*1e6; /* [Pa*m^0.5] Fracture toughness */
+real p0 = 30.0*1.0e6; /* [Pa], Outer pressure */
+real dt = 1000.0; /* [s], Timestep */
+real tMax = 86400.0*10; /* [s], Maximal time */
+real KIc = 1.73*1.0e6; /* [Pa*m^0.5] Fracture toughness */
 real Ct = 1.0e-10; /* [Pa^-1], Compressibility */
 
 /*------------------------------------------------------------------------------------------*/
@@ -83,9 +84,10 @@ real[int] sB = 1.0e6*[
     0.0
 ];
 
-string path = "./result.json";
+real xFracLeft = layerBorder[3];
+real xFracRight = layerBorder[4];
 int nPoints = 500;
-real penalty = 1.0e16*Ew[0];
+real penalty = 1.0e7*Ew[0];
 int maxIter = 40;
 real tol = 1.0e-6;
 verbosity = 0;
@@ -142,7 +144,7 @@ real Hsize = xMax - xMin;
 real Hfrac = xFracR - xFracL;
 
 real[int] xPw = [xMin, xFracL, xFracR, xMax, xMax, xMin];
-real[int] yPw = [0, 0, 0, 0, yMax, yMax];
+real[int] yPw = [0.0, 0.0, 0.0, 0.0, yMax, yMax];
 
 int[int] nGammaW = [(xFracL - xMin)/Hsize, 
                    (xFracR - xFracL)/Hsize,
@@ -170,8 +172,13 @@ real lMeshElast = Hfrac;
 for(int i = 0; i < 6; i++){
     hMeshElast /= 2.0;
     Thw = splitmesh(Thw, 1 + 1*(y <= hMeshElast)*(x <= (xFracR + lMeshElast) && x >= (xFracL - lMeshElast)));
+    // hMeshElast /= 2.0;
     lMeshElast /= 2.0;
     } 
+    
+// cout << Thw.nv << " " << Thw.nt << endl;
+// plot(Thw);
+// exit(0);
 
 /*  Fespace definition for   *\
 \* filtration and backstress */
@@ -213,12 +220,12 @@ Xh nuFunc = nuw[0] * (x <= layerBorder[1]) + nuw[1] * (x > layerBorder[1] && x <
 Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
             + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
             + sB[4] * (x > layerBorder[4]);
-Xh lambdaFunc = nuFunc*EFunc / ((1 + nuFunc) * (1 - 2*nuFunc));
-Xh muFunc = EFunc / (2 + 2*nuFunc);
+Xh lambdaFunc = nuFunc*EFunc / ((1.0 + nuFunc) * (1.0 - 2.0*nuFunc));
+Xh muFunc = EFunc / (2.0 + 2.0*nuFunc);
+// Xh PrFunc = rhow*g*x;
 Xh PrFunc = rhow*g*x + (p0 - rhow*g*x)*(x > layerBorder[1] && x <= layerBorder[2]) 
             + (p0 - rhow*g*x)*(x > layerBorder[3] && x <= layerBorder[4]);
-Xh sigmaMin = (nuFunc / (1 - nuFunc)) * (rho0*g*x - alpha*PrFunc) + alpha*PrFunc;
-// real sigmaH = int1d(Thw, labelFrac)(sigmaMin*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
+Xh sigmaMin = (nuFunc / (1.0 - nuFunc)) * (rho0*g*x - alpha*PrFunc) + alpha*PrFunc;
 
 macro grad(p)[dx(p), dy(p)] // EOM
 
@@ -265,32 +272,27 @@ varf ElasticityBilinearForm([u, v], [phiw, psiw]) =
     int2d(Thw)(
         lambdaFunc*div(u,v)*div(phiw, psiw) + 2.0*muFunc*epsilon(u, v)'*epsilon(phiw, psiw)
     )
-    + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0)
-    + on(labelTop, v = 0.0);
+    + on(labelBottom, v = 0.0);
 
 varf PenaltyBilinearForm([u, v], [phiw, psiw]) =
     int1d(Thw, labelFrac)(
         penalty*v*(vIter < 0.0)*psiw
     )
-    + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0)
-    + on(labelTop, v = 0.0);
+    + on(labelBottom, v = 0.0);
 
 varf RhsLinearForm([u, v], [phiw, psiw]) = 
-    int2d(Thw)(
-        (rho0-rhow)*g*phiw
+    int1d(Thw, labelFrac)(
+        pNet*psiw*(x <= xFracRight && x >= xFracLeft) 
+        // + (1 - (x <= layerBorder[4] && x >= layerBorder[3]))*pNet*(vIter > 1.0e-4)*psiw
     )
-    + int1d(Thw, labelFrac)(
-        pEff*psiw*(x <= layerBorder[4] && x >= layerBorder[3]) 
-        + (1 - (x <= layerBorder[4] && x >= layerBorder[3]))*pEff*(vIter > 1e-10)*psiw
-    )
-    + int1d(Thw, labelLeft)(
-        (rho0 - rhow)*g*x*phiw
-    )
-    + on(labelBottom, v = 0.0)
-    + on(labelRight, u = 0.0)
-    + on(labelTop, v = 0.0);
+    + on(labelBottom, v = 0.0);
+
+
+int nSearch = int((xFracR - xFracL) / 0.1) + 1;
+real[int] fractureLine(nSearch);
+for (int i = 0; i < nSearch; ++i) {
+    fractureLine[i] = xFracL + 0.1*real(i);
+}
 
 /*---------------------------------- MAIN CYCLE ----------------------------------*/
 
@@ -310,10 +312,9 @@ real bsAverage = 0.0;
 int i = 0;
 real t = 0;
 
-{
+{   
     matrix A = FiltrationBilinearForm(Vh, Vh);
     set(A, solver = sparsesolver);
-
     while(pNetAverage < 0.0){
         cout << endl;
         cout << "Time = " << t << " s" << endl;
@@ -334,6 +335,7 @@ real t = 0;
         deltaSyTot = deltaSy-alpha*(p-pOld);
         sigmaB = sigmaB + deltaSyTot;
         bsAverage = -int1d(Th, labelB)(sigmaB*(x <= Lfrac))/Lfrac;
+        sB[1] = bsAverage;
         sB[3] = bsAverage;
         sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
                 + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
@@ -341,24 +343,13 @@ real t = 0;
 
         pNet = pf - sigmaMin - sBFunc;
         pNetAverage = int1d(Thw, labelFrac)(pNet*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
-
-        cout << endl;
-        cout << "Lfrac = " << Lfrac << endl;
-        cout << "Time = " << t << " s" << endl;
-        cout << "Pnet = " << pNetAverage  << "    PnetCrit = " << pNetCrit << endl;
-        cout << "Frac pressure = " << FracPressure << endl;
-        cout << "Iteration - " << i << endl;
-
-        savevtk("./Results/ElasticityConstantFrac" + i + ".vtu", Thw, u, v, Syy, SyyFull, -sigmaMin, pNet, pEff, dataname = "u v Syy SyyFull Smin pNet pEff", order=order);
-        savevtk("./Results/FiltrationInj" + i + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
-
         pOld = p;
         t = t + dt;
         i = i + 1;
         cout << endl;
     }
 
-    while(True){
+    while(t < tMax){
         cout << endl;
         cout << "Time = " << t << " s" << endl;
 
@@ -386,7 +377,6 @@ real t = 0;
                 + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
                 + sB[4] * (x > layerBorder[4]);
 
-        pEff = pf - alpha*PrFunc - sBFunc;
         pNet = pf - sigmaMin - sBFunc;
         pNetAverage = int1d(Thw, labelFrac)(pNet*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
 
@@ -415,16 +405,39 @@ real t = 0;
                 count = 0;
                 iOmega += 1;  
             }
-
             cout << "       Elasticity   (" << count << ")    "<< omega[iOmega] << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
         }
 
-        wAverage = int1d(Thw, labelFrac)(v*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
+        
+        for (int i = 0; i < nSearch; ++i) {
+            if (v(fractureLine[i], 0.0) > 1.0e-4 && fractureLine[i] > layerBorder[2]) {
+                xFracLeft = fractureLine[i];
+                if (xFracLeft > layerBorder[3]){
+                    xFracLeft = layerBorder[3];
+                }
+                break;
+            } else {
+                xFracLeft = layerBorder[3];
+            }
+        }
+
+        for (int i = nSearch - 1; i >= 0; --i) {
+            if (v(fractureLine[i], 0.0) > 1.0e-4) {
+                xFracRight = fractureLine[i];
+                if (xFracRight < layerBorder[4]){
+                    xFracRight = layerBorder[4];
+                }
+                break;
+            } else {
+                xFracRight = layerBorder[4];
+            }
+        }
+
+        wAverage = int1d(Thw, labelFrac)(v*(x <= xFracRight && x >= xFracLeft)) / (xFracRight - xFracLeft);
         wAverage1 = int1d(Thw, labelFrac)(v) / (xFracR - xFracL);
 
-        cout << endl;
+        // cout << endl;
         cout << "Lfrac = " << Lfrac << endl;
-        cout << "Time = " << t << " s" << endl;
         cout << "Pnet = " << pNetAverage  << "    PnetCrit = " << pNetCrit << endl;
         cout << "Frac pressure = " << FracPressure << endl;
         cout << "Backstress = " << bsAverage << endl;
@@ -437,31 +450,64 @@ real t = 0;
         savevtk("./Results/ElasticityConstantFrac" + i + ".vtu", Thw, u, v, Syy, SyyFull, -sigmaMin, pNet, pEff, dataname = "u v Syy SyyFull Smin pNet pEff", order=order);
         savevtk("./Results/FiltrationInj" + i + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
 
-        int nPoints = 20;
-        real[int] xx(nPoints);
-        real[int] vv(nPoints);
-        for(int i=0; i<nPoints; i++){
-            xx[i] = layerBorder[2] + 5.0/(nPoints - 1)*i;
-            vv[i] = v(xx[i], 0.0);
-        }
-        if(vv.min > 1e-4){
-            cout << "Breakthrough" << endl;
-            exit(0);
-        }
-
-        if(pNetAverage >= pNetCrit - 30000){
+        if(pNetAverage >= pNetCrit*0.95){
             Lfrac += 1.0;
-            dt = 500.0;
+            dt = 300.0;
             cdelta=[dt*Q];  // value of point source
             D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
             RHSQ[] = D*cdelta;
         }
         else{
-            dt = 3600.0*0.5;
+            dt = 1000.0;
             cdelta=[dt*Q];  // value of point source
             D = interpolate(Vh, xdelta, ydelta); // the interpolation matrix
             RHSQ[] = D*cdelta;
         }
+
+        {
+            string path = "./Results/result" + i + ".json";
+            BeginJSONFile(path);
+
+            real[int] vv(nPoints);
+            real[int] ss(nPoints);
+            real[int] ssb(nPoints);
+            real[int] pr(nPoints);
+            real[int] xx(nPoints);
+            real hx = Hfrac / real(nPoints - 1);
+
+            for (int i = 0; i < nPoints; ++i) {
+                    xx[i] = xFracL + hx*real(i);
+                    vv[i] = 1.0e3*v(xx[i], 0.0);
+                    ss[i] = 1.0e-6*sigmaMin(xx[i], 0.0);
+                    ssb[i] = ss[i] + 1.0e-6*sBFunc(xx[i], 0.0);
+                    pr[i] = 1.0e-6*PrFunc(xx[i], 0.0);
+                }
+
+            WriteRealToJSON(path, "t", t, false);
+            WriteRealToJSON(path, "fracleft", xFracLeft, false);
+            WriteRealToJSON(path, "fracright", xFracRight, false);
+            WriteArray1DRealToJSON(path, "Borders", layerBorder, false);
+            WriteArray1DIntToJSON(path, "ProdLayers", ProdLayers, false);
+            WriteArray1DRealToJSON(path, "depth", xx, false);
+            WriteArray1DRealToJSON(path, "halfwidth", vv, false);
+            WriteArray1DRealToJSON(path, "sMin", ss, false);
+            WriteArray1DRealToJSON(path, "sMinBack", ssb, false);
+            WriteArray1DRealToJSON(path, "Pressure", pr, true);
+
+            EndJSONFile(path);
+        }
+
+        // int n1 = 20;
+        // real[int] xx1(n1);
+        // real[int] vv1(n1);
+        // for(int i = 0; i < n1; i++){
+        //     xx1[i] = layerBorder[2] + 5.0/(n1 - 1)*i;
+        //     vv1[i] = v(xx1[i], 0.0);
+        // }
+        // if(vv1.min > 1e-4){
+        //     cout << "!!! Breakthrough !!!" << endl;
+        //     exit(0);
+        // }
 
         pOld = p;
         t = t + dt;
