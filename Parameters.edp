@@ -91,6 +91,7 @@ real[int] sB = 1.0e6*[ /* [Pa], Backstress in each layer */
 ];
 
 real penalty = 1.0e7*Ew[0];
+int nPoints = 500;
 int maxIter = 40;                   /* Maximum number of nonlinear iterations */
 real tol = 1.0e-6;                  /* Tolerance for iteration stop criterion */
 verbosity = 0;

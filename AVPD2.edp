@@ -447,8 +447,8 @@ real t = 0;
 
         Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
         SyyFull = Syy - alpha*PrFunc;
-        savevtk("./Results/ElasticityConstantFrac" + i + ".vtu", Thw, u, v, Syy, SyyFull, -sigmaMin, pNet, pEff, dataname = "u v Syy SyyFull Smin pNet pEff", order=order);
-        savevtk("./Results/FiltrationInj" + i + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
+        // savevtk("./Results1/ElasticityConstantFrac" + i + ".vtu", Thw, u, v, Syy, SyyFull, -sigmaMin, pNet, pEff, dataname = "u v Syy SyyFull Smin pNet pEff", order=order);
+        // savevtk("./Results1/FiltrationInj" + i + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
 
         if(pNetAverage >= pNetCrit*0.95){
             Lfrac += 1.0;
@@ -465,7 +465,7 @@ real t = 0;
         }
 
         {
-            string path = "./Results/result" + i + ".json";
+            string path = "./Results1/result" + i + ".json";
             BeginJSONFile(path);
 
             real[int] vv(nPoints);

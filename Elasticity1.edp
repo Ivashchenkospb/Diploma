@@ -2,7 +2,7 @@ real alpha = 1.0;
 real rho0 = 2300.0;
 real rhow = 1000.0;
 real g = 9.80665;
-real pf = (41.3)*1e6; /* Pa, Fracture pressure */
+real pf = (0.0)*1e6; /* Pa, Fracture pressure */
 real p0 = 31.8*1e6;
 
 real[int] layerBorder = [ /* [m], Layer borders depth */
@@ -128,8 +128,8 @@ Xh sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= 
 Xh lambdaFunc = nuFunc*EFunc / ((1 + nuFunc) * (1 - 2*nuFunc));
 Xh muFunc = EFunc / (2 + 2*nuFunc);
 
-Xh PrFunc = rhow*g*x + (p0 - rhow*g*x)*(x > layerBorder[1] && x <= layerBorder[2]) + (p0 - rhow*g*x)*(x > layerBorder[3] && x <= layerBorder[4]);
-// Xh PrFunc = rhow*g*x;
+// Xh PrFunc = rhow*g*x + (p0 - rhow*g*x)*(x > layerBorder[1] && x <= layerBorder[2]) + (p0 - rhow*g*x)*(x > layerBorder[3] && x <= layerBorder[4]);
+Xh PrFunc = rhow*g*x;
 
 Xh sigmaMin = (nuFunc / (1 - nuFunc)) * (rho0*g*x - alpha*PrFunc) + alpha*PrFunc;
 Xh sigmaMinEff = (nuFunc / (1 - nuFunc)) * (rho0*g*x - alpha*PrFunc);

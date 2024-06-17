@@ -2,6 +2,7 @@ load "iovtk"
 load "pipe"
 load "MUMPS_seq"
 include "gnuplotInterface.edp"
+include "jsonmodule.edp"
 
 include "Parameters.edp"
 
@@ -221,13 +222,9 @@ real wAverage = 0.0;
 real bsAverage = 0.0;
 
 int i = 0;
-int j = 0;
 real t = 0;
 
 {
-    // ofstream FracPresResults("Results/fracpressure.txt");
-    // ofstream FracBsResults("Results/fracbackstress.txt");
-    // ofstream FracResults("Results/fracresults.txt");
 
     while(t < tMax){
         cout << "Time = " << t << " s" << endl;
@@ -236,7 +233,8 @@ real t = 0;
         set(A, solver = sparsesolver);
         real[int] b = FiltrationLinearForm(0, Vh);
         p[] = A^-1*b;
-        // FracPressure = int1d(Th, labelB)(p*(x <= Lfrac))/Lfrac;
+        FracPressure = int1d(Th, labelB)(p*(x <= Lfrac))/Lfrac;
+        pf = FracPressure;
 
         RHS = alpha*(p-pOld)/PP;
         real[int] bB = BackstressLinearForm(0, Vh);
@@ -249,15 +247,55 @@ real t = 0;
         deltaSyTot = deltaSy-alpha*(p-pOld);
         sigmaB = sigmaB + deltaSyTot;
         bsAverage = -int1d(Th, labelB)(sigmaB*(x <= Lfrac))/Lfrac;
+        sB[3] = bsAverage;
+        sBFunc = sB[0] * (x <= layerBorder[1]) + sB[1] * (x > layerBorder[1] && x <= layerBorder[2]) 
+                + sB[2] * (x > layerBorder[2] && x <= layerBorder[3]) + sB[3] * (x > layerBorder[3] && x <= layerBorder[4]) 
+                + sB[4] * (x > layerBorder[4]);
 
-        // FracPresResults << t << "\t" << FracPressure << "\n";
-        // FracBsResults << t << "\t" << bsAverage << "\n";
+        pNet = pf - sigmaMin - sBFunc;
+        pNetAverage = int1d(Thw, labelFrac)(pNet*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
 
-        savevtk("./Results/FiltrationProd" + j + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
+        // savevtk("./Results/FiltrationProd" + j + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
+
+        {
+            string path = "./Results1/result" + i + ".json";
+            BeginJSONFile(path);
+
+            real[int] vv(nPoints);
+            real[int] ss(nPoints);
+            real[int] ssb(nPoints);
+            real[int] pr(nPoints);
+            real[int] xx(nPoints);
+            real hx = Hfrac / real(nPoints - 1);
+
+            for (int i = 0; i < nPoints; ++i) {
+                    xx[i] = xFracL + hx*real(i);
+                    vv[i] = 1.0e3*v(xx[i], 0.0);
+                    ss[i] = 1.0e-6*sigmaMin(xx[i], 0.0);
+                    ssb[i] = ss[i] + 1.0e-6*sBFunc(xx[i], 0.0);
+                    pr[i] = 1.0e-6*PrFunc(xx[i], 0.0);
+                }
+
+            WriteRealToJSON(path, "t", t, false);
+            WriteRealToJSON(path, "Length", Lfrac, false);
+            WriteRealToJSON(path, "Frac pressure", FracPressure, false);
+            WriteRealToJSON(path, "Backstress", bsAverage, false);
+            WriteRealToJSON(path, "pNet", pNetAverage, false);
+            WriteRealToJSON(path, "w", wAverage, false);
+            WriteArray1DRealToJSON(path, "Borders", layerBorder, false);
+            WriteArray1DIntToJSON(path, "ProdLayers", ProdLayers, false);
+            WriteArray1DRealToJSON(path, "depth", xx, false);
+            WriteArray1DRealToJSON(path, "halfwidth", vv, false);
+            WriteArray1DRealToJSON(path, "sMin", ss, false);
+            WriteArray1DRealToJSON(path, "sMinBack", ssb, false);
+            WriteArray1DRealToJSON(path, "Pressure", pr, true);
+
+            EndJSONFile(path);
+        }
 
         pOld = p;
         t = t + dt;
-        j = j + 1;
+        i = i + 1;
 
     }
 
@@ -267,11 +305,9 @@ real t = 0;
     D = interpolate(Vh, xdelta, ydelta);
     RHSQ[] = D*cdelta;
 
-    t = 0;
-    tMax = 100000*10;
+    tMax = 100000*10 + t;
 
     while(t < tMax){
-        // real cpu = clock();
         cout << endl;
         cout << "Time = " << t << " s" << endl;
 
@@ -328,7 +364,7 @@ real t = 0;
                 iOmega += 1;  
             }
 
-            cout << "       Elasticity   (" << count << ")    "<< omega[iOmega] << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
+            cout << "\t\tElasticity   (" << count << ")    "<< omega[iOmega] << "    rel_error_L2 = " << relErrorL2 << " (" << tol << ")" << endl;
         }
 
         wAverage = int1d(Thw, labelFrac)(v*(x <= layerBorder[4] && x >= layerBorder[3])) / (layerBorder[4] - layerBorder[3]);
@@ -342,26 +378,10 @@ real t = 0;
         cout << "wAverage = " << wAverage << endl;
         cout << "Iteration - " << i << endl;
 
-        // FracPresResults << t << "\t" << FracPressure << "\n";
-        // FracBsResults << t << "\t" << bsAverage << "\n";
-        // FracResults << t << "\t" << Lfrac << "\t" << pNetAverage << "\t" << wAverage << "\n";
-
-        Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
-        SyyFull = Syy - alpha*PrFunc;
-        savevtk("./Results/ElasticityConstantFrac" + i + ".vtu", Thw, u, v, Syy, SyyFull, -sigmaMin, pNet, pEff, dataname = "u v Syy SyyFull Smin pNet pEff", order=order);
-        savevtk("./Results/FiltrationInj" + i + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
-
-        // int nPoints = 20;
-        // real[int] xx(nPoints);
-        // real[int] vv(nPoints);
-        // for(int i=0; i<nPoints; i++){
-        //     xx[i] = layerBorder[2] + 5.0/(nPoints - 1)*i;
-        //     vv[i] = v(xx[i], 0.0);
-        // }
-        // if(vv.min > 1e-4){
-        //     cout << "Breakthrough" << endl;
-        //     exit(0);
-        // }
+        // Syy = lambdaFunc*div(u, v) + 2.0*muFunc*dy(v);
+        // SyyFull = Syy - alpha*PrFunc;
+        // savevtk("./Results/ElasticityConstantFrac" + i + ".vtu", Thw, u, v, Syy, SyyFull, -sigmaMin, pNet, pEff, dataname = "u v Syy SyyFull Smin pNet pEff", order=order);
+        // savevtk("./Results/FiltrationInj" + i + ".vtu", Th, p, sigmaB, psi, dataname = "p Backstress psi ", order=order);
 
         if(pNetAverage >= pNetCrit - 30000){
             dt = 500.0;
@@ -374,11 +394,45 @@ real t = 0;
             Lfrac += 1.0;
         }
 
+        {
+            string path = "./Results1/result" + i + ".json";
+            BeginJSONFile(path);
+
+            real[int] vv(nPoints);
+            real[int] ss(nPoints);
+            real[int] ssb(nPoints);
+            real[int] pr(nPoints);
+            real[int] xx(nPoints);
+            real hx = Hfrac / real(nPoints - 1);
+
+            for (int i = 0; i < nPoints; ++i) {
+                    xx[i] = xFracL + hx*real(i);
+                    vv[i] = 1.0e3*v(xx[i], 0.0);
+                    ss[i] = 1.0e-6*sigmaMin(xx[i], 0.0);
+                    ssb[i] = ss[i] + 1.0e-6*sBFunc(xx[i], 0.0);
+                    pr[i] = 1.0e-6*PrFunc(xx[i], 0.0);
+                }
+
+            WriteRealToJSON(path, "t", t, false);
+            WriteRealToJSON(path, "Length", Lfrac, false);
+            WriteRealToJSON(path, "Frac pressure", FracPressure, false);
+            WriteRealToJSON(path, "Backstress", bsAverage, false);
+            WriteRealToJSON(path, "pNet", pNetAverage, false);
+            WriteRealToJSON(path, "w", wAverage, false);
+            WriteArray1DRealToJSON(path, "Borders", layerBorder, false);
+            WriteArray1DIntToJSON(path, "ProdLayers", ProdLayers, false);
+            WriteArray1DRealToJSON(path, "depth", xx, false);
+            WriteArray1DRealToJSON(path, "halfwidth", vv, false);
+            WriteArray1DRealToJSON(path, "sMin", ss, false);
+            WriteArray1DRealToJSON(path, "sMinBack", ssb, false);
+            WriteArray1DRealToJSON(path, "Pressure", pr, true);
+
+            EndJSONFile(path);
+        }
+
         pOld = p;
         t = t + dt;
         i = i + 1;
-        j = j + 1;
-        // cout << " CPU time = " << clock()-cpu << endl;
         cout << endl;
     }
 }
